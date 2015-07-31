@@ -1,7 +1,7 @@
 Package: soGGi
 Type: Package
 Title: Summarise Over Grouped Genomic Intervals
-Version: 0.99.0
+Version: 1.1.3
 Date: 2015-03-26
 Author: Ziwei Liand, Gopuraja Dharmalingam, Tom Carroll
 Maintainer: Tom Carroll <tc.infomatics@gmail.com>
