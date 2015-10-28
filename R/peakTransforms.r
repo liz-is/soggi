@@ -64,17 +64,17 @@ extractSummits <- function(x,consensusRanges){
 extractScores <- function(x,consensusRanges,score="summitScores"){
   scores <- vector("numeric",length=length(consensusRanges))
   overMat <- as.matrix(findOverlaps(consensusRanges,x))
-  scores[overMat[,1]] <- as.vector(elementMetadata(x[overMat[,2]])[,"summitScores"])
+  scores[overMat[,1]] <- as.vector(mcols(x[overMat[,2]])[,"summitScores"])
   return(scores)
 }
 
-dropNonPrimary <- function(x,consensusRanges,id="elementMetadata.ID",score="summitScores"){
+dropNonPrimary <- function(x,consensusRanges,id="mcols.ID",score="summitScores"){
   mat <- as.matrix(findOverlaps(consensusRanges,x))
   tempConsensusRanges <- consensusRanges[mat[,1],]
-  elementMetadata(tempConsensusRanges) <- elementMetadata(x[mat[,2]])[,c(id,score)]
-  tempConsensusRanges <- tempConsensusRanges[order(elementMetadata(tempConsensusRanges)[,score],decreasing=TRUE),]  
-  primaryIDs <- elementMetadata(tempConsensusRanges[match(unique(tempConsensusRanges[,id]),tempConsensusRanges[,id])])[,id]
-  x <- x[elementMetadata(x)[,id] %in% primaryIDs]
+  mcols(tempConsensusRanges) <- mcols(x[mat[,2]])[,c(id,score)]
+  tempConsensusRanges <- tempConsensusRanges[order(mcols(tempConsensusRanges)[,score],decreasing=TRUE),]  
+  primaryIDs <- mcols(tempConsensusRanges[match(unique(tempConsensusRanges[,id]),tempConsensusRanges[,id])])[,id]
+  x <- x[mcols(x)[,id] %in% primaryIDs]
   return(x)
 }
 #' Returns summits and summmit scores after optional fragment length prediction and read extension
@@ -119,16 +119,16 @@ runConsensusRegions <- function(testRanges,method="majority",overlap="any"){
       
       reduced <- reduce(unlist(testRanges))
       consensusIDs <- paste0("consensus_",seq(1,length(reduced)))
-      elementMetadata(reduced) <- 
+      mcols(reduced) <- 
       do.call(cbind,lapply(testRanges,function(x)(reduced %over% x)+0))
       if(method=="majority"){
-        reducedConsensus <- reduced[rowSums(as.data.frame(elementMetadata(reduced))) > length(testRanges)/2,]
+        reducedConsensus <- reduced[rowSums(as.data.frame(mcols(reduced))) > length(testRanges)/2,]
       }
       if(method=="none"){
         reducedConsensus <- reduced
       }
     consensusIDs <- paste0("consensus_",seq(1,length(reducedConsensus)))
-    elementMetadata(reducedConsensus) <- cbind(as.data.frame(elementMetadata(reducedConsensus)),consensusIDs)
+    mcols(reducedConsensus) <- cbind(as.data.frame(mcols(reducedConsensus)),consensusIDs)
     return(reducedConsensus)
     
   }
@@ -205,7 +205,7 @@ runGetSummitScore <- function(reads,summits,ChrOfInterestshift,FragmentLength=15
     if(score=="height"){
       summitScores <- as.vector(unlist(cov[summits],use.names=FALSE))
     }
-  elementMetadata(summits) <- cbind(as.data.frame(elementMetadata(summits)),summitScores)
+  mcols(summits) <- cbind(as.data.frame(mcols(summits)),summitScores)
     return(summits)
 }
 
@@ -274,9 +274,9 @@ orientBy <- function(testRanges,anchorRanges){
   distIndex <- distanceToNearest(testRanges,anchorRanges)
   anchorRangesFilt <- anchorRanges[subjectHits(distIndex)]
 #   widths <- width(pintersect(testRanges,anchorRangesFilt,resolve.empty="max.start"))
-#   testRanges$distance <- elementMetadata(distIndex)$distance
+#   testRanges$distance <- mcols(distIndex)$distance
 #   testRanges$overlapsize <- widths
-#   anchorRangesFilt <- anchorRangesFilt[order(elementMetadata(distIndex)$distance,widths),]
+#   anchorRangesFilt <- anchorRangesFilt[order(mcols(distIndex)$distance,widths),]
   strand(testRanges) <- strand(anchorRangesFilt)
   return(testRanges)
 }
@@ -310,9 +310,9 @@ GetGRanges <- function(LoadFile,AllChr=NULL,ChrOfInterest=NULL,simple=FALSE,sepr
         if(ncol(RangesTable) > 6){
           Strand <- rep("*",nrow(RangesTable))
           RemainderColumn <- as.data.frame(RangesTable[,-c(1:6)])
-          elementMetadata(RegionRanges) <- cbind(ID,Score,Strand,RemainderColumn)
+          mcols(RegionRanges) <- cbind(ID,Score,Strand,RemainderColumn)
         }else{
-          elementMetadata(RegionRanges) <- cbind(ID,Score)
+          mcols(RegionRanges) <- cbind(ID,Score)
         }
       }
     }
@@ -346,7 +346,7 @@ findCovMaxPos <- function(reads,bedRanges,ChrOfInterest,FragmentLength){
       NoSummitRanges <- bedRanges[is.na(Maxes)]
       Maxes[is.na(Maxes)]  <- (start((ranges(NoSummitRanges[seqnames(NoSummitRanges) == names(ChrOfInterest)])))+end((ranges(NoSummitRanges[seqnames(NoSummitRanges) == names(ChrOfInterest)]))))/2
     }
-    MaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == names(ChrOfInterest)]),IRanges(start=Maxes,end=Maxes),elementMetadata=elementMetadata(bedRanges[seqnames(bedRanges) == names(ChrOfInterest)]))
+    MaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == names(ChrOfInterest)]),IRanges(start=Maxes,end=Maxes),mcols=mcols(bedRanges[seqnames(bedRanges) == names(ChrOfInterest)]))
     #revAllCov <- rev(coverage(reads))
     #revAllCov <- runmean(revAllCov[names(revAllCov) %in% ChrOfInterest],20)
     #cat("Calculating reverse Summits on ",ChrOfInterest," ..")
@@ -355,9 +355,9 @@ findCovMaxPos <- function(reads,bedRanges,ChrOfInterest,FragmentLength){
     #  revNoSummitRanges <- bedRanges[is.na(revMaxes)]
     #  revMaxes[is.na(revMaxes)]  <- (start((ranges(revNoSummitRanges[seqnames(revNoSummitRanges) == ChrOfInterest])))+end((ranges(revNoSummitRanges[seqnames(revNoSummitRanges) == ChrOfInterest]))))/2
     #}
-    #revMaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == ChrOfInterest]),IRanges(start=Maxes,end=Maxes),elementMetadata=elementMetadata(bedRanges[seqnames(bedRanges) == ChrOfInterest]))
+    #revMaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == ChrOfInterest]),IRanges(start=Maxes,end=Maxes),mcols=mcols(bedRanges[seqnames(bedRanges) == ChrOfInterest]))
     #meanMaxes <- rowMeans(cbind(Maxes,revMaxes))
-    #meanMaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == ChrOfInterest]),IRanges(start=meanMaxes,end=meanMaxes),elementMetadata=elementMetadata(bedRanges[seqnames(bedRanges) == ChrOfInterest]))
+    #meanMaxRanges <- GRanges(seqnames(bedRanges[seqnames(bedRanges) == ChrOfInterest]),IRanges(start=meanMaxes,end=meanMaxes),mcols=mcols(bedRanges[seqnames(bedRanges) == ChrOfInterest]))
     #cat(".done\n")
   }
   #return(meanMaxRanges)

@@ -19,7 +19,7 @@
 #' @examples 
 #' data(pwmCov)
 #' data(singleGRange)
-#' regionPlot(pwmCov,singleGRange ,format="rlelist")
+#' 
 #' 
 #' @export
 pwmToCoverage <- function(pwm,genome,min="70%",removeRand=FALSE,chrsOfInterest=NULL){
@@ -84,7 +84,7 @@ makeGRangesWithSummary <- function(GRangesSet,scoreBy){
                  ranges(GRangesSet)
             )
   )  
-  elementMetadata(GRangesSet) <- data.frame(score=temp)
+  mcols(GRangesSet) <- data.frame(score=temp)
   return(GRangesSet)
 }
   
@@ -112,7 +112,7 @@ motifCov <- function(genome,regions,pwm,chrOfInterest,atCentre=FALSE){
     theRanges <- as(trial,"IRanges")
   }
   if(length(theRanges) > 0){
-    motifCov <- unlist(coverage(GRanges(chrOfInterest,theRanges,"*",elementMetadata(trial)$score),weight="elementMetadata.trial..score"))
+    motifCov <- unlist(coverage(GRanges(chrOfInterest,theRanges,"*",mcols(trial)$score),weight="mcols.trial..score"))
   }else{
     motifCov <- unlist(RleList(rep(0,length(genome[[chrOfInterest]]))))
   }
@@ -132,7 +132,7 @@ motifCov <- function(genome,regions,pwm,chrOfInterest,atCentre=FALSE){
 #' FALSE assigns every basepair the sum of scores of all overlapping motifs. 
 #' @export
 makeMotifScoreRle <- function(pwm,regions,genome,extend,removeRand=FALSE,strandScore="mean",atCentre=FALSE){
-  regions <- GRanges(seqnames(regions),IRanges(start(regions)-extend,end(regions)+extend),strand=strand(regions),elementMetadata(regions))
+  regions <- GRanges(seqnames(regions),IRanges(start(regions)-extend,end(regions)+extend),strand=strand(regions),mcols(regions))
   lengths <- seqlengths(genome)
   ## Filter testRanges to those contained within chromosomes.
   message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)

@@ -52,7 +52,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
 ## 
 ## gts may be named list of character vectors referring to rownames(object) or a granges
 ## When 
-  #app <- lapply(gsets,function(x){colMeans(assays(object)[[1]][rowData(object)$name %in% x,])})
+  #app <- lapply(gsets,function(x){colMeans(assays(object)[[1]][rowRanges(object)$name %in% x,])})
   nOfWindows <- object@params$nOfWindows
   
   ## When running with gts option
@@ -76,15 +76,15 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
       
       if(!is.null(outliers)){
         profileTempList <- lapply(gts,function(x){
-          mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
-          if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-          colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
-          })
+        mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+        if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
+        colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
+        })        
       }else{
         profileTempList <- lapply(gts,function(x){
-          mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
-          if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-          colMeans(mat, na.rm = TRUE) })
+        mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+        if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
+        colMeans(mat, na.rm = TRUE) })
       }
     
     ## Create melted data frame for ggplot and attach index
@@ -106,7 +106,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
       } 
     
     ## Add Sample name, group name and index to dataframe
-      profileFrame <-data.frame("xIndex"=axisIndex,Group=profileMatTemp[,1],Sample=basename(unlist(exptData(object)["names"]))[p],Score=profileMatTemp[,2])
+      profileFrame <-data.frame("xIndex"=axisIndex,Group=profileMatTemp[,1],Sample=basename(unlist(metadata(object)["names"]))[p],Score=profileMatTemp[,2])
       
       profileList[[p]] <- profileFrame
     }  
@@ -124,8 +124,8 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
             ## extract profile matrix
           profileTemp <- assays(object)[[p]]
             
-          mcols(rowData(object))$summariseCol <- apply(as.data.frame(mcols(rowData(object))[,summariseBy,drop=FALSE]) , 1 , paste , collapse = "-" )
-          gts <- as.list(unique(mcols(rowData(object))$summariseCol))
+          mcols(rowRanges(object))$summariseCol <- apply(as.data.frame(mcols(rowRanges(object))[,summariseBy,drop=FALSE]) , 1 , paste , collapse = "-" )
+          gts <- as.list(unique(mcols(rowRanges(object))$summariseCol))
           summariseBy <- "summariseCol"
           names(gts) <- unlist(gts)
           if(!is.null(outliers)){
@@ -133,13 +133,13 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
               mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
               colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
-            })         
+            })             
           }else{
             profileTempList <- lapply(gts,function(x){
               mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
               colMeans(mat, na.rm = TRUE) 
-            })
+              })
           }
       
     
@@ -160,7 +160,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
     } 
     
     ## Add Sample name, group name and index to dataframe
-    profileFrame <-data.frame("xIndex"=axisIndex,Group=profileMatTemp[,1],Sample=basename(unlist(exptData(object)["names"]))[p],Score=profileMatTemp[,2])
+    profileFrame <-data.frame("xIndex"=axisIndex,Group=profileMatTemp[,1],Sample=basename(unlist(metadata(object)["names"]))[p],Score=profileMatTemp[,2])
     
     profileList[[p]] <- profileFrame
   }  
@@ -176,19 +176,20 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
     
     if(!is.null(outliers)){
       profileList <- lapply(c(assays(object)),function(x) {
-        if(any(is.na(x))){warning("NAs present in assays; removing them when creating average profile")}
+        if (any(is.na(x))){warning("NAs present in assays; removing them when creating average profile")}
         colMeans(winsorizeMatrix(x,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
-      })         
+
+        })         
     }else{
       profileList <- lapply(c(assays(object)),function(x) {
-        if(any(is.na(x))){warning("NAs present in assays; removing them when creating average profile")}
-           colMeans(x, na.rm = TRUE)})
+      if(any(is.na(x))){warning("NAs present in assays; removing them when creating average profile")}
+      colMeans(x, na.rm = TRUE)})
     }
     
     ## Join multiple assays/samples
     
     profileFrame <- do.call(cbind,profileList)
-    colnames(profileFrame) <- basename(unlist(exptData(object)["names"]))
+    colnames(profileFrame) <- basename(unlist(metadata(object)["names"]))
 
     ## Attach index for different styles of plots
     
@@ -208,7 +209,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
     meltedProfileFrame <- melt(profileFrame)
     colnames(meltedProfileFrame) <- c("xIndex","Sample","Score")
   }
-  #profileList <- lapply(c(assays(object)),function(y)lapply(gsets,function(x){colMeans(y[rowData(object)$name %in% x,])}))
+  #profileList <- lapply(c(assays(object)),function(y)lapply(gsets,function(x){colMeans(y[rowRanges(object)$name %in% x,])}))
   
   ## Create geom_path plot
   if(!is.null(gts) & !is.null(groupData)){
@@ -308,6 +309,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
 winsorizeMatrix <- function(mat,limitlow,limithigh, na.rm = FALSE){
   apply(mat,2,function(x)winsorizeVector(x,limitlow,limithigh, na.rm = na.rm))
 }
+
 winsorizeVector <- function(vect,limitlow,limithigh, na.rm = FALSE){
   qs <- quantile(vect,c(limitlow,limithigh), na.rm = na.rm)
   vect[vect < qs[1]] <- qs[1]  
