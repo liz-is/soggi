@@ -76,13 +76,13 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
       
       if(!is.null(outliers)){
         profileTempList <- lapply(gts,function(x){
-        mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+        mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
         if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
         colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
         })        
       }else{
         profileTempList <- lapply(gts,function(x){
-        mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+        mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
         if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
         colMeans(mat, na.rm = TRUE) })
       }
@@ -130,13 +130,13 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
           names(gts) <- unlist(gts)
           if(!is.null(outliers)){
             profileTempList <- lapply(gts,function(x){
-              mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+              mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
               colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
             })             
           }else{
             profileTempList <- lapply(gts,function(x){
-              mat <- subsetProfile(profileTemp,x,rowData(object),summariseBy)
+              mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
               colMeans(mat, na.rm = TRUE) 
               })
