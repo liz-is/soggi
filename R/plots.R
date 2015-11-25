@@ -30,7 +30,7 @@
 #' sample metadata or character vector "group" to set line type by groups in gts
 #' @param groupBy Character vector or formula of either column names from colData(object) containing
 #' sample metadata or character "group" to colour by groups in gts
-#' @param outliers A numeric vector of length 1 containing proportion from limits to windsorise.]
+#' @param outliers A numeric vector of length 2 containing lower and upper limits for winsorisation.
 #' @param freeScale TRUE or FALSE to set whether ggplot 2 facets have their own scales. 
 #' Useful for comparing multiple samples of differing depths without normalisation. Default is FALSE.
 #' @return  A gg object from ggplot2
@@ -75,10 +75,17 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
     ## Alternatively windsoring (see method) of subsets then colmeans.
       
       if(!is.null(outliers)){
+        if(length(outliers) != 2){
+          stop("'outliers' must be of length two (lower and upper limits for isation)")
+        }
+        if(any(outliers > 1 | outliers < 0)){
+          stop("values in 'outliers' must be between 0 and 1")
+        }
+        
         profileTempList <- lapply(gts,function(x){
         mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
         if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-        colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
+        colMeans(izeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
         })        
       }else{
         profileTempList <- lapply(gts,function(x){
@@ -132,7 +139,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
             profileTempList <- lapply(gts,function(x){
               mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-              colMeans(winsorizeMatrix(mat,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
+              colMeans(izeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
             })             
           }else{
             profileTempList <- lapply(gts,function(x){
@@ -175,9 +182,17 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
     ## windsorised colmeans of whole profile matrix
     
     if(!is.null(outliers)){
+      
+      if(length(outliers) != 2){
+        stop("'outliers' must be of length two (lower and upper limits for isation)")
+      }
+      if(any(outliers > 1 | outliers < 0)){
+        stop("values in 'outliers' must be between 0 and 1")
+      }
+      
       profileList <- lapply(c(assays(object)),function(x) {
         if (any(is.na(x))){warning("NAs present in assays; removing them when creating average profile")}
-        colMeans(winsorizeMatrix(x,outliers,1-outliers, na.rm = TRUE), na.rm = TRUE)
+        colMeans(winsorizeMatrix(x,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
 
         })         
     }else{
