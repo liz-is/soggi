@@ -85,7 +85,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
         profileTempList <- lapply(gts,function(x){
         mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
         if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-        colMeans(izeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
+        colMeans(winsorizeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
         })        
       }else{
         profileTempList <- lapply(gts,function(x){
@@ -139,7 +139,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
             profileTempList <- lapply(gts,function(x){
               mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
               if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
-              colMeans(izeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
+              colMeans(winsorizeMatrix(mat,outliers[1],outliers[2], na.rm = TRUE), na.rm = TRUE)
             })             
           }else{
             profileTempList <- lapply(gts,function(x){
