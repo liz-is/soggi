@@ -92,6 +92,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
         mat <- subsetProfile(profileTemp,x,rowRanges(object),summariseBy)
         if(any(is.na(mat))){warning("NAs present in assays; removing them when creating average profile")}
         colMeans(mat, na.rm = TRUE) })
+
       }
     
     ## Create melted data frame for ggplot and attach index
