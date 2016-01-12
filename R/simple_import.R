@@ -5,41 +5,8 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
                          format="bam", seqlengths=NULL, forceFragment=NULL, 
                          method="bin", genome=NULL, cutoff=80, downSample=NULL, 
                          minFragmentLength=NULL, maxFragmentLength=NULL){
-
-  ## Initialize empty matrices and paramaters for collecting coverage analysis
-  ## Find maximum distance to use for filtering out of bounds extended GRanges
-  if(style == "region" | style=="regionandpoint"){
-    posRegionStartMat <- NULL
-    posRegionEndMat <- NULL
-    negRegionStartMat <- NULL
-    negRegionEndMat <- NULL
-    RegionsMat <- NULL
-    maxDistance <- max(distanceOutRegionStart,distanceOutRegionEnd)
-    distanceUpStart <- distanceOutRegionStart
-    distanceDownEnd <- distanceOutRegionEnd
-    
-  }
-  
-  if(style == "point"){
-    PosRegionMat <- NULL
-    NegRegionMat <- NULL
-    RegionsMat <- NULL    
-    maxDistance <- distanceAround
-    distanceUpStart <- distanceUp
-    distanceDownEnd <- distanceDown    
-  }
-  
-  if(style == "percentOfRegion"){
-    maxDistance <- round((distanceAround/100)*width(testRanges))
-    RegionsMat <- NULL    
-    distanceUpStart <- NULL
-    distanceDownEnd <- NULL    
-  }
-  totalReads <- NA
-  
   
   ## If format is bam, read header and get contig information
-  
   if(tolower(format) == "bam"){
     ## Get all chromosomes in bamFile
     message("Reading Bam header information...",appendLF = FALSE)
@@ -101,46 +68,18 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
     message("..Done")
   }
   
-  # Expand ranges as specified
+  # Split ranges into +/- strand. Regions with no strand information are assigned to + strand
+  message("Splitting regions by Watson and Crick strand..", appendLF = FALSE)
+  mcols(testRanges) <- cbind(mcols(testRanges), data.frame(giID = paste0("giID",seq(1,length(testRanges)))))
+  strand(testRanges[strand(testRanges) == "*"]) <- "+"
+  testRangesPos <- testRanges[strand(testRanges) == "+"]
+  testRangesNeg <- testRanges[strand(testRanges) == "-"]
+  message("..Done")
   
-  if (style == "region"){
-    testRanges <- testRanges
-    
-  } else if (style == "centered"){
-    testRanges <- resize(testRanges, fix = "center", width = expand)
-    
-  } else if (style == "flanked"){
-    
-    if (mode(flank) == "character"){ 
-      flank_p <- strsplit(flank, "%")[[1]][1] # anything before the % will be taken
-      
-      flank_widths <- width(testRanges) * as.numeric(flank_p) / 100
-      start(testRanges) <- start(testRanges) - flank_widths
-      end(testRanges) <- end(testRanges) + flank_widths
-      
-    } else if (mode(flank) == "numeric") {
-      #by default up and down flanks are equal size
-      flankUp <- flank
-      flankDown <- flank
-      
-      start(testRanges) <- start(testRanges) - flankUp
-      end(testRanges) <- end(testRanges) + flankDown
-      
-    } else if (!is.null(flankUp) & !is.null(flankDown)) {
-      #can use to have different flanks for up / down (left/right)
-      
-      start(testRanges) <- start(testRanges) - flankUp
-      end(testRanges) <- end(testRanges) + flankDown
-      
-    } else {
-      
-      stop("For style = 'flanked', 'flank' should be either a character string per or a numeric number of base pairs to use to flank the regions.")
-    }
-    
-  } else {
-    stop("'style' not recognised! Must be one of region, centered or flanked.")
-  }
+  # Expand ranges as specified by 'style'
   
+  testRanges <- make_ranges(testRanges, style = style, expand = expand, 
+                            flank = flank, flankUp = flankUp, flankDown = flankDown)
   
   # Exclude and count regions which when extended are outside contig boundaries.
   
@@ -975,5 +914,65 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
     } 
 
 }
+}
+
+#' Make ranges for data import
+
+#' Make ranges according to specified style: use regions as-is, expand all to same width,
+#' add a constant flank to each side (in bp), or extend by some % to each side.
+#'
+#' @import GenomicRanges 
+
+make_ranges <- function(testRanges, style = "region", expand = NULL, flank = NULL, 
+                        flankUp = NULL, flankDown = NULL){
+  
+  # Expand ranges as specified by 'style'
+  if (style == "region"){
+    message("Using testRanges as regions.")
+    testRanges <- testRanges
+    
+  } else if (style == "centered"){
+    if (is.null(expand)){
+      warning("Range expansion width not specified; using 100bp.")
+      expand <- 100
+    }
+    message(paste("Expanding testRanges to", expand, "bp to use as regions."))
+    testRanges <- resize(testRanges, fix = "center", width = expand)
+    
+  } else if (style == "flanked"){
+    
+    if (mode(flank) == "character"){ 
+      flank_p <- strsplit(flank, "%")[[1]][1] # anything before the % will be taken
+      
+      message(paste("Expanding testRanges by ", flank_p, "% to use as regions."))
+      flank_widths <- width(testRanges) * as.numeric(flank_p) / 100
+      start(testRanges) <- start(testRanges) - flank_widths
+      end(testRanges) <- end(testRanges) + flank_widths
+      
+    } else if (mode(flank) == "numeric" | (mode(flankUp) == "numeric" & mode(flankDown) == "numeric")) {
+      #either flank or both flankUp andflankDown must be specified
+      
+      if (is.null(flankUp) & is.null(flankDown)){
+        #by default up and down flanks are equal size
+        flankUp <- flank
+        flankDown <- flank
+      }
+      
+      message(paste("Expanding testRanges by ", flankUp," bp upstream and ", flankDown, "bp downstream to use as regions." ))
+      
+      if(any(strand(testRanges)=="*")){ stop("strand '*' should be set to '+'")}
+      
+      start(testRanges) <- start(testRanges) - ifelse(strand(testRanges) == "+", flankUp, flankDown) #correct flank depending on strand
+      end(testRanges) <- end(testRanges) + ifelse(strand(testRanges) == "+", flankDown, flankUp)
+      
+    } else {
+      stop("For style 'flanked', 'flank' should be either a character string e.g. '100%', or, if numeric, the number of base pairs to use to flank the regions.")
+    }
+    
+  } else {
+    stop(paste0("style '", style,"' not recognised! Must be one of region, centered or flanked."))
+  }
+  
+  return(testRanges)
 }
 
