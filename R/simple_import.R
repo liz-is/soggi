@@ -1,10 +1,17 @@
-simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
-                         nOfWindows=100, FragmentLength=150, expand = 10000,
-                         flank="100%", flankUp=NULL, flankDown=NULL, paired=FALSE, 
-                         normalize="RPM", plotBy="coverage", removeDup=FALSE, 
-                         format="bam", seqlengths=NULL, forceFragment=NULL, 
-                         method="bin", genome=NULL, cutoff=80, downSample=NULL, 
-                         minFragmentLength=NULL, maxFragmentLength=NULL){
+simpleImport <- function(bamFile, testRanges, samplename=NULL, 
+                         #region options
+                         style="region",
+                         method="bin", nOfWindows=100, expand = NULL, flank=NULL, 
+                         flankUp=NULL, flankDown=NULL, 
+                         #import options
+                         format="bam", paired=FALSE, removeDup=FALSE, FragmentLength=150, 
+                         forceFragment=NULL, minFragmentLength=NULL, maxFragmentLength=NULL,
+                         normalize="RPM", downSample=NULL,
+                         plotBy="coverage",  
+                         seqlengths=NULL, 
+                         #pwm options
+                         genome=NULL, cutoff=80,  
+                         ){
   
   ## If format is bam, read header and get contig information
   if(tolower(format) == "bam"){
@@ -83,91 +90,64 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
   
   # Exclude and count regions which when extended are outside contig boundaries.
   
-  if(style != "percentOfRegion"){
-    ## Filter testRanges to those contained within chromosomes.
-    message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)
-    testRangeNames <- unique(seqnames(testRanges))
-    temptestranges <- GRanges()
-    for(i in 1:length(testRangeNames)){
-      perchrRanges <- testRanges[seqnames(testRanges) %in% as.vector(testRangeNames[i])]
-      temptestranges <- c(temptestranges,perchrRanges[end(perchrRanges)+maxDistance < lengths[names(lengths) %in% testRangeNames[i]]
-                                                      & start(perchrRanges)-maxDistance > 0 ])
-      #print(i)
-    }
-  }
-  if(style == "percentOfRegion"){
-    message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)
-    testRangeNames <- unique(seqnames(testRanges))
-    temptestranges <- GRanges()
-    for(i in 1:length(testRangeNames)){
-      perChrMaxDistance <- maxDistance[as.vector(seqnames(testRanges) %in% as.vector(testRangeNames[i]))]
-      perchrRanges <- testRanges[seqnames(testRanges) %in% as.vector(testRangeNames[i])]
-      temptestranges <- c(temptestranges,perchrRanges[end(perchrRanges)+perChrMaxDistance < lengths[names(lengths) %in% testRangeNames[i]]
-                                                      & start(perchrRanges)-perChrMaxDistance > 0 ])
-      #print(i)
-      perChrMaxDistance <- perChrMaxDistance[end(perchrRanges)+perChrMaxDistance < lengths[names(lengths) %in% testRangeNames[i]]
-                                             & start(perchrRanges)-perChrMaxDistance > 0 ]
-      distanceUpStart <- c(distanceUpStart,perChrMaxDistance)
-    }
-    distanceDownEnd <- distanceUpStart
-    
-  }  
+  message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)
+  chr_lengths <- lengths[as.vector(seqnames(testRanges))]
+  oob_idx <- which(end(testRanges) > chr_lengths | start(testRanges) < 0)
+  temptestranges <- testRanges[-oob_idx]
   message("..Done")
-  message("Filtered ",length(testRanges)-length(temptestranges)," of ",length(testRanges)," regions")
+  message("Filtered ", length(oob_idx)," of ",length(testRanges)," regions")
+  message(paste("Filtered regions with indexes:", paste(oob_idx, collapse= ", ")))
+  
   testRanges <- temptestranges
   temptestranges <- NULL
+ 
   
-  # Split ranges into +/- strand. Regions with no strand information are assigned to + strand
-    
-  message("Splitting regions by Watson and Crick strand..",appendLF = FALSE)
-  mcols(testRanges) <- cbind(mcols(testRanges),data.frame(giID = paste0("giID",seq(1,length(testRanges)))))
-  strand(testRanges[strand(testRanges) == "*"]) <- "+"
-  testRangesPos <- testRanges[strand(testRanges) == "+"]
-  testRangesNeg <- testRanges[strand(testRanges) == "-"]
-  message("..Done")
-  if(style=="percentOfRegion"){
-    distanceUpStartPos <- distanceUpStart[as.vector(strand(testRanges) == "+")] 
-    distanceDownEndPos <- distanceUpStartPos    
-    distanceUpStartNeg <- distanceUpStart[as.vector(strand(testRanges) == "-")]
-    distanceDownEndNeg <- distanceUpStartNeg
-    message("..Done")
-  }else{
-    distanceUpStartPos <- distanceUpStart 
-    distanceDownEndPos <- distanceDownEnd    
-    distanceUpStartNeg <- distanceUpStart
-    distanceDownEndNeg <- distanceDownEnd    
-    message("..Done")
+  # if style is flank, flanks are specified in bp, and  regions are not of equal width,
+  # split ranges out into region plus left and right flanks
+  # otherwise starts and ends of regions will not line up in matrix
+  # e.g. 100 bp flank with 800 bp region will have 10/80/10 bins
+  # while 100 bp flank with 300 bp region will have 20/60/20 bins
+  # other cases are fine without splitting
+  
+  to_split <- (style == "flanked") & 
+    (length(unique(width(testRanges))) > 1) & 
+    (mode(flank) == "numeric" | (mode(flankUp) == "numeric" & mode(flankDown) == "numeric"))
+                              
+  if (to_split){
+    ranges_list <- split_ranges(testRanges, flank, flankUp, flankDown)
+  } else {
+    ranges_list <- list(testRanges)
   }
   
-#  if(style=="percentOfRegion"){
-#    message("Filtering regions which are smaller than windows into region...",appendLF = FALSE)
-#    ## Split Regions into those on positive and negative strands..
-#    testRangesPos <- testRangesPos[width(testRangesPos) > nOfWindows]
-#    testRangesNeg <- testRangesNeg[width(testRangesPos) > nOfWindows]
-#    message("..Done")
-#  }  
+  # if regions are not of equal width and method is not 'bin' or 'spline', 
+  # set method to 'bin' with 100 windows
   
-  if(style=="region"){
-    message("Filtering regions which are smaller than windows into region...",appendLF = FALSE)
-    ## Split Regions into those on positive and negative strands..
-    testRangesPos <- testRangesPos[(end(testRangesPos)-distanceInRegionEnd) - (start(testRangesPos)+distanceInRegionStart) > nOfWindows]
-    testRangesNeg <- testRangesNeg[(end(testRangesNeg)-distanceInRegionStart) - (start(testRangesNeg)+distanceInRegionEnd) > nOfWindows]
-    message("..Done")
-  }  
+  if (length(unique(width(testRanges))) > 1 & is.null(method)){
+    warning("Cannot make matrix with regions of varying width: setting method to 'bin'")
+    method <- "bin"
+  }
   
-  message("Found ",length(testRangesPos)," Watson strand regions")
-  message("Found ",length(testRangesNeg)," Crick strand regions")
+  # then filter any regions that are too small
+  # Exclude regions which are smaller than the number of windows to be used
+  message("Filtering regions which are smaller than windows into region...",appendLF = FALSE)
   
+  too_small_idx <- unique(unlist(lapply(ranges_list, function(x){
+    which(width(x) < nOfWindows)
+  })))
   
-  ## Extend regions and get positive versus negative regions
-  message("Extending regions..",appendLF=FALSE)    
-  exttestRanges <- c(GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)-distanceUpStartPos,end(testRangesPos)+distanceDownEndPos)),
-                     GRanges(seqnames(testRangesNeg),IRanges(start(testRangesNeg)-distanceDownEndNeg,end(testRangesNeg)+distanceUpStartNeg))
-  )
-  message("...done")   
+  ranges_list <- lapply(ranges_list, function(x){ x[-too_small_idx]})
+  
+  message("..Done")
+  message(paste0("Filtered ", length(too_small_idx), " regions that are smaller than nOfWindows (", 
+                 nOfWindows, "bp)"))
+  if (length(too_small_idx) > 0){
+    message(paste("Filtered regions:", paste(too_small_idx, collapse= ", ")))
+  }
+  
+  # then read in data and create matrices of signal, per contig
   
   ## Create GRanges to be used in scanBamParam while reading in Bamfile regions.
-  reducedExtTestRanges <- reduce(exttestRanges)
+  reducedExtTestRanges <- reduce(testRanges)
 
   ## Set up scanBanParam for reading in bam file.
   
@@ -252,9 +232,6 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
     message("..done")
   }
   chromosomes <- seqlevels(genomeCov) 
-  
-  
-  # If style is "point" creates matrix of  per base pair coverage around centre of GRanges
   
   if(style=="point"){
     testRangesPos <- resize(testRangesPos,1,"center")
@@ -679,7 +656,7 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL, style="region",
     
     message("Defining flanks of regions..",appendLF=FALSE)
     
-    ## Create GRanges for flanking regions
+    ##Create GRanges for flanking regions
     startRegionRangesPos <- GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)-distanceOutRegionStart,start(testRangesPos)+distanceInRegionStart),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
     endRegionRangesPos <- GRanges(seqnames(testRangesPos),IRanges(end(testRangesPos)-distanceInRegionEnd,end(testRangesPos)+distanceOutRegionEnd),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
     startRegionRangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(end(testRangesNeg)-distanceInRegionStart,end(testRangesNeg)+distanceOutRegionStart),strand=Rle("+",length(testRangesNeg)),mcols(testRangesNeg))
@@ -976,3 +953,33 @@ make_ranges <- function(testRanges, style = "region", expand = NULL, flank = NUL
   return(testRanges)
 }
 
+split_ranges <- function(testRanges, flank = NULL, flankUp = NULL, flankDown = NULL){
+  #either flank or both flankUp andflankDown must be specified
+  if (is.null(flankUp) & is.null(flankDown)){
+    #by default up and down flanks are equal size
+    flankUp <- flank
+    flankDown <- flank
+  }
+  
+  flank_width_up <- flankUp
+  flank_width_down <- flankDown
+  
+  #split into flanking and original ranges
+  
+  orig_start <- start(testRanges) + ifelse(strand(testRanges) == "+", 
+                                           flank_width_up, flank_width_down)
+  orig_end <- end(testRanges) - ifelse(strand(testRanges) == "-", 
+                                       flank_width_down, flank_width_up)
+  
+  up_ranges <- testRanges
+  end(up_ranges) <- orig_start - 1
+  
+  down_ranges <- testRanges
+  start(down_ranges) <- orig_end +1
+  
+  orig_ranges <- testRanges
+  start(orig_ranges) <- orig_start
+  end(orig_ranges) <- orig_end
+  
+  return(list(up_ranges, orig_ranges, down_ranges))
+}
