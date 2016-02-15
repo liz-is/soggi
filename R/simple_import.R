@@ -1,17 +1,21 @@
 simpleImport <- function(bamFile, testRanges, samplename=NULL, 
                          #region options
                          style="region",
-                         method="bin", nOfWindows=100, expand = NULL, flank=NULL, 
-                         flankUp=NULL, flankDown=NULL, 
+                         method="bin", binMethod = "mean", nOfWindows=100, 
+                         expand = NULL, flank=NULL, flankUp=NULL, flankDown=NULL, 
                          #import options
                          format="bam", paired=FALSE, removeDup=FALSE, FragmentLength=150, 
                          forceFragment=NULL, minFragmentLength=NULL, maxFragmentLength=NULL,
                          normalize="RPM", downSample=NULL,
-                         plotBy="coverage",  
+                         strand.aware = FALSE,
                          seqlengths=NULL, 
                          #pwm options
-                         genome=NULL, cutoff=80,  
-                         ){
+                         genome=NULL, cutoff=80){
+  ### TO DO: parameter checking here
+  # style
+  # method
+  # format
+  
   
   ## If format is bam, read header and get contig information
   if(tolower(format) == "bam"){
@@ -24,9 +28,7 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
   }
   
   ## For remaining formats import data and find contig information
-  
   # Import bigwig.
-  
   if(tolower(format) %in% c("bigwig", "bw")){
     message("Importing BigWig...",appendLF = FALSE)
     genomeCov <- import.bw(bamFile,as = "RleList")
@@ -44,21 +46,18 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
   }
   
   # If format is pwm PWM, calculate motifs on forward and reverse strand.
-  
   if(format=="pwm"){
     bamFile <- pwmToCoverage(bamFile,genome,min=cutoff,removeRand=FALSE)
     format <- "rlelist"   
   }
   
   # If format is granges, simply covert to coverage (This would work for GenomicInterval or GenomicAlignments)
-  
   if(tolower(format)=="granges"){
     genomeCov <- coverage(bamFile)
     format <- "rlelist"   
   }  
   
   # If format is rlelist, import rle and set widths/contigs by seqlengths.
-  
   if(tolower(format)=="rlelist"){
     message("Importing rlelist",appendLF = FALSE)
     genomeCov <- bamFile
@@ -66,7 +65,7 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
       seqlengths(genomeCov) <- unlist(lapply(genomeCov,length))
     }else{
       allchrs <- intersect(names(seqlengths), names(genomeCov))
-      if (length(allchrs)==0){ error("No overlapping chromosomes between coverage and supplied seqlengths") }
+      if (length(allchrs)==0){ stop("No overlapping chromosomes between coverage and supplied seqlengths") }
       genomeCov <- genomeCov[allchrs] #subset to get only desired chrs
       seqlengths(genomeCov)[allchrs] <- seqlengths[allchrs] #set seqlengths
     }
@@ -74,33 +73,26 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
     allchrs <- names(lengths)
     message("..Done")
   }
-  
-  # Split ranges into +/- strand. Regions with no strand information are assigned to + strand
-  message("Splitting regions by Watson and Crick strand..", appendLF = FALSE)
-  mcols(testRanges) <- cbind(mcols(testRanges), data.frame(giID = paste0("giID",seq(1,length(testRanges)))))
-  strand(testRanges[strand(testRanges) == "*"]) <- "+"
-  testRangesPos <- testRanges[strand(testRanges) == "+"]
-  testRangesNeg <- testRanges[strand(testRanges) == "-"]
-  message("..Done")
-  
+
+  original_ranges <- testRanges #save for later!
+  testRanges$original_order <- paste0("range_", 1:length(testRanges))
+
   # Expand ranges as specified by 'style'
-  
   testRanges <- make_ranges(testRanges, style = style, expand = expand, 
                             flank = flank, flankUp = flankUp, flankDown = flankDown)
   
   # Exclude and count regions which when extended are outside contig boundaries.
-  
   message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)
   chr_lengths <- lengths[as.vector(seqnames(testRanges))]
   oob_idx <- which(end(testRanges) > chr_lengths | start(testRanges) < 0)
-  temptestranges <- testRanges[-oob_idx]
-  message("..Done")
-  message("Filtered ", length(oob_idx)," of ",length(testRanges)," regions")
-  message(paste("Filtered regions with indexes:", paste(oob_idx, collapse= ", ")))
+  if (length(oob_idx) > 0){
+    testRanges <- testRanges[-oob_idx]
+    message(paste("Filtered regions with indexes:", paste(oob_idx, collapse= ", ")))
+  }
+  message("Filtered ", length(oob_idx)," of ",length(original_ranges)," regions")
   
-  testRanges <- temptestranges
-  temptestranges <- NULL
- 
+  message("..Done")
+  
   
   # if style is flank, flanks are specified in bp, and  regions are not of equal width,
   # split ranges out into region plus left and right flanks
@@ -126,22 +118,24 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
     warning("Cannot make matrix with regions of varying width: setting method to 'bin'")
     method <- "bin"
   }
-  
-  # then filter any regions that are too small
-  # Exclude regions which are smaller than the number of windows to be used
-  message("Filtering regions which are smaller than windows into region...",appendLF = FALSE)
-  
-  too_small_idx <- unique(unlist(lapply(ranges_list, function(x){
-    which(width(x) < nOfWindows)
-  })))
-  
-  ranges_list <- lapply(ranges_list, function(x){ x[-too_small_idx]})
-  
-  message("..Done")
-  message(paste0("Filtered ", length(too_small_idx), " regions that are smaller than nOfWindows (", 
-                 nOfWindows, "bp)"))
-  if (length(too_small_idx) > 0){
-    message(paste("Filtered regions:", paste(too_small_idx, collapse= ", ")))
+ 
+  if (!is.null(method) && method == "bin") {
+    # then filter any regions that are too small
+    # Exclude regions which are smaller than the number of windows to be used
+    message("Filtering regions which are smaller than windows into region...",appendLF = FALSE)
+    
+    too_small_idx <- unique(unlist(lapply(ranges_list, function(x){
+      which(width(x) < nOfWindows)
+    })))
+    
+    ranges_list <- lapply(ranges_list, function(x){ x[-too_small_idx]})
+    
+    message("..Done")
+    message(paste0("Filtered ", length(too_small_idx), " regions that are smaller than nOfWindows (", 
+                   nOfWindows, "bp)"))
+    if (length(too_small_idx) > 0){
+      message(paste("Filtered regions:", paste(too_small_idx, collapse= ", ")))
+    }
   }
   
   # then read in data and create matrices of signal, per contig
@@ -151,14 +145,15 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
 
   ## Set up scanBanParam for reading in bam file.
   
-  if(!removeDup){
-    Param <- ScanBamParam(which=GRanges(seqnames=seqnames(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),IRanges(start=start(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),end=end(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]))))
-  }else{
-    Param <- ScanBamParam(flag=scanBamFlag(isDuplicate=FALSE),which=GRanges(seqnames=seqnames(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),IRanges(start=start(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),end=end(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]))))
-  }
-  
   ## if format is bam read in bamfile.
   if(format == "bam"){
+    
+    if(!removeDup){
+      Param <- ScanBamParam(which=GRanges(seqnames=seqnames(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),IRanges(start=start(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),end=end(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]))))
+    }else{
+      Param <- ScanBamParam(flag=scanBamFlag(isDuplicate=FALSE),which=GRanges(seqnames=seqnames(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),IRanges(start=start(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]),end=end(reducedExtTestRanges[seqnames(reducedExtTestRanges) %in% allchrs]))))
+    }
+    
     message("Reading tags from ",bamFile,appendLF=FALSE)
     #totalReads <- alignmentStats(bamFile)[,"mapped"]
     # QuasR is breaking builds so for now relies on USER input
@@ -184,9 +179,8 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
   
     if(paired==TRUE){
       
-      gaPaired <- readGAlignments(bamFile, 
-                                         param=ScanBamParam(what=c("mpos"),
-                                                            flag=scanBamFlag(isProperPair = TRUE,isFirstMateRead = TRUE)))      
+      gaPaired <- readGAlignments(bamFile, param=ScanBamParam(what=c("mpos"),
+                                                              flag=scanBamFlag(isProperPair = TRUE,isFirstMateRead = TRUE)))      
       tempPos <- GRanges(seqnames(gaPaired[strand(gaPaired) == "+"]),
                          IRanges(
                            start=start(gaPaired[strand(gaPaired) == "+"]),
@@ -232,666 +226,60 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
     message("..done")
   }
   chromosomes <- seqlevels(genomeCov) 
-  
-  if(style=="point"){
-    testRangesPos <- resize(testRangesPos,1,"center")
-    testRangesNeg <- resize(testRangesNeg,1,"center")
-    RangesPos <- GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)-distanceUpStart,start(testRangesPos)+distanceDownEnd),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
-    RangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(end(testRangesNeg)-distanceDownEnd,end(testRangesNeg)+distanceUpStart),strand=Rle("-",length(testRangesNeg)),mcols(testRangesNeg))  
-    message("Calculating coverage across regions\nCalculating per contig. ")
-    
-    for(c in 1:length(chromosomes)){
-      message(paste0("contig: ",c))      
-      if(length(RangesPos[seqnames(RangesPos) %in% chromosomes[c]]) > 0){
-        PosRegionMat <- matrix(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(RangesPos[seqnames(RangesPos) %in% chromosomes[c]])]),ncol=mean(width(RangesPos)),byrow=TRUE)
-        rownames(PosRegionMat) <- RangesPos[seqnames(RangesPos) %in% chromosomes[c]]$giID
-      }
-      if(length(RangesNeg[seqnames(RangesNeg) %in% chromosomes[c]]) > 0){
-        NegRegionMat <- matrix(rev(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(RangesNeg[seqnames(RangesNeg) %in% chromosomes[c]])])),ncol=mean(width(RangesNeg)),byrow=TRUE)
-        rownames(NegRegionMat) <- RangesNeg[seqnames(RangesNeg) %in% chromosomes[c]]$giID
-      }    
-      RegionsMat <- rbind(RegionsMat,PosRegionMat,NegRegionMat)
-    }
-    message("Creating ChIPprofile.")
-    
-    ## Create matrix as summarisedexperiment with column and row names to be exported as part of ChIPprofile object
-    profileMat <- RegionsMat
-    colnames(profileMat) <- c(paste0("Point_Centre",seq(0-distanceUpStart,-1)),"Point_Centre",paste0("Point_Centre",seq(1,distanceDownEnd)))
-    filteredRanges <- c(RangesPos,RangesNeg)
-    profileSample <- SummarizedExperiment(profileMat,rowRanges=filteredRanges[match(rownames(profileMat),filteredRanges$giID)])
 
-    ## Set sample name for ChIPprofile object
+  mat <- extract_data_in_ranges(testRanges, genomeCov, method = method, 
+                                binMethod = binMethod, nOfWindows = nOfWindows)
+  
+  if(strand.aware == TRUE){
+    mat[which(strand(testRanges)=="-"),] <- mat[which(strand(testRanges)=="-"), ncol(mat):1] #flip rows
     
-    if(is.null(samplename)){
-      if(format %in% c("rlelist","pwm","granges")){
-        metadata(profileSample)  <- list(names=c("Sample"))
-      }else{
-        metadata(profileSample)<- list(names=c(bamFile),AlignedReadsInBam=totalReads)  
-      }
-    } else{
-      metadata(profileSample)<- list(names=samplename,AlignedReadsInBam=totalReads)
-    }
-    
-    ## Pass parameters
-    
-    paramList <- list("nOfWindows"=nOfWindows,
-                      "style"=style,
-                      "samplename"=samplename,
-                      "nOfWindows"=nOfWindows,
-                      "FragmentLength"=FragmentLength,
-                      "distanceAround"=distanceAround,
-                      "distanceUp"=distanceUp,
-                      "distanceDown"=distanceDown,
-                      "distanceInRegionStart"=distanceInRegionStart,
-                      "distanceInRegionEnd"=distanceInRegionEnd,
-                      "distanceOutRegionStart"=distanceOutRegionStart,
-                      "distanceOutRegionEnd"=distanceOutRegionEnd,
-                      "paired"=paired,
-                      "normalize"=normalize,
-                      "plotBy"=plotBy,
-                      "removeDup"=removeDup,
-                      "format"=format,
-                      "seqlengths"=seqlengths,
-                      "forceFragment"=forceFragment,
-                      "method"=method,
-                      "genome"=genome,
-                      "cutoff"=cutoff,
-                      "minFragmentLength"=minFragmentLength,
-                      "maxFragmentLength"=maxFragmentLength,
-                      "downSample"=downSample
-                      )
-    return(new("ChIPprofile",profileSample,params=paramList))
   }
   
-  ## If style is precentOfRegion. This normalises all regions to the same length.
-  
-  if(style=="percentOfRegion"){
-    
-  ##  Spline method average plots
-    
-    if(method=="spline"){
-    
-        ### Add option to have different length flanks here?
-        
-        ## Build extended GRanges of regions and flanks
-        
-        grWidths <- width(testRangesPos)
-        Flanks <- round(grWidths*((distanceAround)/100))      
-        RangesPos <- GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)-Flanks,end(testRangesPos)+Flanks),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))     
-        grWidths <- width(testRangesNeg)
-        Flanks <- round(grWidths*((distanceAround)/100))
-        RangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(start(testRangesNeg)-Flanks,end(testRangesNeg)+Flanks),strand=Rle("+",length(testRangesNeg)),mcols(testRangesNeg))     
-        
-        ## Initiate empty matrices for counts and GRanges for extracting coverage from rlelist
-        matPos <- NULL
-        matNeg <- NULL
-        testRangesPosNew <- GRanges()
-        testRangesNegNew <- GRanges()
-        message(paste0("Calculating splines for regions.\nProcessing per contig"))
-        
-        ## Cycle through contigs and calcualte spline for each view object created from GRanges of interest.
-        
-        for(c in 1:length(chromosomes)){
-          message(paste0("contig: ",i))
-          if(any(seqnames(RangesPos)==chromosomes[c])){
-            testRangesPosNew <- c(testRangesPosNew,RangesPos[seqnames(RangesPos)==chromosomes[c]
-                                                             ])          
-          matPos = c(matPos,list(t(viewApply(
-                                          Views(genomeCov[names(genomeCov)==chromosomes[c]][[1]],
-                                                ranges(RangesPos[seqnames(RangesPos)==chromosomes[c]])
-                                          ),
-                                            function(x)spline(x,n=(2*(nOfWindows*((distanceAround)/100)))+nOfWindows)$y))))
-          }
-          
-          if(any(seqnames(RangesNeg)==chromosomes[c])){
-            testRangesNegNew <- c(testRangesNegNew,RangesNeg[seqnames(RangesNeg)==chromosomes[c]
-                                                             ])          
-            matNeg = c(matNeg,list(t(viewApply(
-              Views(genomeCov[names(genomeCov)==chromosomes[c]][[1]],
-                    ranges(RangesNeg[seqnames(RangesNeg)==chromosomes[c]])
-                    ),
-            function(x)spline(x,n=(2*(nOfWindows*((distanceAround)/100)))+nOfWindows)$y))[,((2*(nOfWindows*((distanceAround)/100)))+nOfWindows):1]))
-          }
-  
-      }
-      
-      ## Create ChIPprofile object.
-      
-      message("Creating ChIPprofile")    
-      if(!is.null(matPos)){
-        matPos <- do.call(rbind,matPos)
-      }
-      if(!is.null(matNeg)){
-        matNeg <- do.call(rbind,matNeg)
-      }    
-      meansMat <- rbind(matPos,matNeg)
-      allRanges <- c(testRangesPosNew,testRangesNegNew)
-      rownames(meansMat) <- allRanges$giID
-      profileMat <- meansMat[order(rownames(meansMat)),]
-      colnames(profileMat) <- c(paste0("Start-",seq(1,(nOfWindows*((distanceAround)/100)))),
-                                paste0("Start+",seq(1,nOfWindows)),
-                                paste0("End+",seq(1,(nOfWindows*((distanceAround)/100)))))
-  
-      profileSample <- SummarizedExperiment(profileMat,rowRanges=allRanges[match(rownames(profileMat),allRanges$giID)])
-      
-      ## Set sample name for ChIPprofile object
-      
-      if(is.null(samplename)){
-        if(format %in% c("rlelist","pwm","granges")){
-          metadata(profileSample)  <- list(names=c("Sample"))
-        }else{
-          metadata(profileSample)<- list(names=c(bamFile),AlignedReadsInBam=totalReads)  
-        }
-      } else{
-        metadata(profileSample)<- list(names=samplename,AlignedReadsInBam=totalReads)
-      }
-      
-      ## Pass parameters
-      
-      paramList <- list("nOfWindows"=nOfWindows,
-                        "style"=style,
-                        "samplename"=samplename,
-                        "nOfWindows"=nOfWindows,
-                        "FragmentLength"=FragmentLength,
-                        "distanceAround"=distanceAround,
-                        "distanceUp"=distanceUp,
-                        "distanceDown"=distanceDown,
-                        "distanceInRegionStart"=distanceInRegionStart,
-                        "distanceInRegionEnd"=distanceInRegionEnd,
-                        "distanceOutRegionStart"=distanceOutRegionStart,
-                        "distanceOutRegionEnd"=distanceOutRegionEnd,
-                        "paired"=paired,
-                        "normalize"=normalize,
-                        "plotBy"=plotBy,
-                        "removeDup"=removeDup,
-                        "format"=format,
-                        "seqlengths"=seqlengths,
-                        "forceFragment"=forceFragment,
-                        "method"=method,
-                        "genome"=genome,
-                        "cutoff"=cutoff,
-                        "minFragmentLength"=minFragmentLength,
-                        "maxFragmentLength"=maxFragmentLength,
-                        "downSample"=downSample
-      )
-      return(new("ChIPprofile",profileSample,params=paramList))
-    }
-      ## Calculate mean coverage within bins across regions.
-    if(method=="bin"){
-      
-      ## 
-      meansListNeg <- vector("numeric")
-      meansListPos <- vector("numeric")
-      
-      grListWindowsPos <- GRanges()
-      grListWindowsNeg <- GRanges()
-      
-      ## Create GRanges of windows across regions
-      message("Making windows.")
-      
-      ## Positive regions
-      
-      if(length(testRangesPos) > 0){
-        
-        ## Calculate bin lengths
-        grWidths <- width(testRangesPos)
-        windows <- floor(grWidths%/%nOfWindows)
-        extraForWindows <- grWidths%%nOfWindows
-        extraForFlankWindows <- grWidths%%(nOfWindows*((distanceAround)/100))
-        addToWindow <- 0
-        startPos <- start(testRangesPos)-distanceUpStartPos#-(windows/2)
-        rem <- rep(0,length(extraForFlankWindows))
-        rem2 <- NULL
-        
-        ## Create bin GRanges for positive 5' flanking regions
-        message("Windowing positive 5' flanking ")
-        for(i in 1:(nOfWindows*((distanceAround)/100))){
-          #message("Window", i,appendLF=F)
-          rem2 <- rem+((extraForFlankWindows >= i)+0)
-          
-          grListWindowsPos <- c(grListWindowsPos,GRanges(seqnames(testRangesPos),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesPos$giID))
-          rem <- rem2
-        }
-        
-        ## Create bin GRanges for positive regions
-        
-        startPos <- start(testRangesPos)#-(windows/2)
-        rem <- rep(0,length(extraForWindows))
-        rem2 <- NULL
-        message("Windowing positive regions ")
-        for(i in 1:(nOfWindows)){
-          #message("Window", i)
-          rem2 <- rem+((extraForWindows >= i)+0)
-          
-          grListWindowsPos <- c(grListWindowsPos,GRanges(seqnames(testRangesPos),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesPos$giID))
-          rem <- rem2
-        }
-        
-        ## Create bin GRanges for positive 3' flanking regions
-        
-        rem <- rep(0,length(extraForFlankWindows))
-        rem2 <- NULL
-        startPos <- end(testRangesPos)#-(windows/2)
-        message("Windowing positive 3' flank ")
-        for(i in 1:(nOfWindows*((distanceAround)/100))){
-          #message("Window", i)
-          rem2 <- rem+((extraForFlankWindows >= i)+0)
-          
-          grListWindowsPos <- c(grListWindowsPos,GRanges(seqnames(testRangesPos),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesPos$giID))
-          rem <- rem2
-        }
-        
-        ## Order by giID to group windows from gene. Retains secondary order as
-        ## created (bin order)
-        grListWindowsPos <- grListWindowsPos[order(grListWindowsPos$giID)]
-        
-      }
-      
-       ## Handle negative GRanges as with positive GRanges
-      if(length(testRangesNeg) > 0){
-        
-        grWidths <- width(testRangesNeg)
-        windows <- floor(grWidths%/%nOfWindows)
-        extraForWindows <- grWidths%%nOfWindows
-        extraForFlankWindows <- grWidths%%(nOfWindows*((distanceAround)/100))
-        addToWindow <- 0
-        startPos <- start(testRangesNeg)-distanceDownEndNeg
-        rem <- rep(0,length(extraForFlankWindows))
-        rem2 <- NULL
-        message("Windowing negative 5' flank ")
-        for(i in 1:(nOfWindows*((distanceAround)/100))){
-          #message("Window", i)
-          rem2 <- rem+((extraForFlankWindows >= i)+0)
-          
-          grListWindowsNeg <- c(grListWindowsNeg,GRanges(seqnames(testRangesNeg),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesNeg$giID))
-          rem <- rem2
-        }
-        
-        startPos <- start(testRangesNeg)#-(windows/2)
-        rem <- rep(0,length(extraForWindows))
-        rem2 <- NULL
-        message("Windowing negative regions ")
-        
-        for(i in 1:(nOfWindows)){
-          #message("Window", i)
-          rem2 <- rem+((extraForWindows >= i)+0)
-          
-          grListWindowsNeg <- c(grListWindowsNeg,GRanges(seqnames(testRangesNeg),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesNeg$giID))
-          rem <- rem2
-        }
-        rem <- rep(0,length(extraForFlankWindows))
-        rem2 <- NULL
-        startPos <- end(testRangesNeg)#-(windows/2)
-        message("Windowing negative 3' flank ")
-        
-        for(i in 1:(nOfWindows*((distanceAround)/100))){
-          #message("Window", i)
-          rem2 <- rem+((extraForFlankWindows >= i)+0)
-          
-          grListWindowsNeg <- c(grListWindowsNeg,GRanges(seqnames(testRangesNeg),IRanges(      
-            (startPos)+rem+(windows*(i-1)),
-            startPos+(windows*i)-1+rem2),giID=testRangesNeg$giID))
-          rem <- rem2
-        }
-        
-        grListWindowsNeg <- grListWindowsNeg[order(grListWindowsNeg$giID)]
-      
-      }
-      grListWindows <- list(grListWindowsPos,grListWindowsNeg)
-      message("..done\n")
-      
-      ## Cycle through contigs to extract scores from rlelist per contig
-
-      message(paste0("Calculating bin scores for regions.\nProcessing per contig"))
-      
-      
-      for(c in 1:length(chromosomes)){
+  colnames(mat) <- 1:ncol(mat)
  
-        message(paste0("contig: ",c))
-        
-        message("Processing inner region windows in ",chromosomes[c])
-        covPerPeakPos <- Views(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]],ranges(grListWindows[[1]][seqnames(grListWindows[[1]]) == chromosomes[c]]))
-        doubleTempPos <- viewMeans(covPerPeakPos)
-        names(doubleTempPos) <- as.vector(grListWindows[[1]][seqnames(grListWindows[[1]]) == chromosomes[c]]$giID)
-        meansListPos <- c(meansListPos,doubleTempPos)
-        covPerPeakNeg <- Views(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]],ranges(grListWindows[[2]][seqnames(grListWindows[[2]]) == chromosomes[c]]))
-        doubleTempNeg <- viewMeans(covPerPeakNeg)
-        names(doubleTempNeg) <- as.vector(grListWindows[[2]][seqnames(grListWindows[[2]]) == chromosomes[c]]$giID)
-        meansListNeg <- c(meansListNeg,doubleTempNeg)
-        message("..done")
-        message("Processing flanking windows in ",chromosomes[c])      
-        
-        tempstartRegionRangesPosMat <- NULL
-        tempendRegionRangesPosMat <- NULL  
-        tempstartRegionRangesNegMat <- NULL
-        tempendRegionRangesNegMat <- NULL    
-      }
-      
-      ## Create matrices for mean bin coverage
-      
-      meansPos <- matrix(meansListPos,
-                             ncol=((nOfWindows*((distanceAround)/100))*2)+nOfWindows
-                             ,byrow=TRUE)
-      if(nrow(meansPos) > 0){
-      rownames(meansPos) <- matrix(names(meansListPos),ncol=((nOfWindows*((distanceAround)/100))*2)+nOfWindows
-                                       ,byrow=TRUE)[,1]
-      }
-      meansNeg <- matrix(meansListNeg,
-                         ncol=((nOfWindows*((distanceAround)/100))*2)+nOfWindows
-                         ,byrow=TRUE)[,(((nOfWindows*((distanceAround)/100))*2)+nOfWindows):1]
-      if(nrow(meansNeg) > 0){
-        
-      rownames(meansNeg) <- matrix(names(meansListNeg),ncol=((nOfWindows*((distanceAround)/100))*2)+nOfWindows
-                                   ,byrow=TRUE)[,1]
-      }
-      meansMat <- rbind(meansPos,meansNeg)
-      profileMat <- meansMat[order(rownames(meansMat)),]
-    }
-    
-    ### Create ChIPprofile object.
-    
-    colnames(profileMat) <- c(paste0("Start-",seq(1,(nOfWindows*((distanceAround)/100)))),
-                              paste0("Start+",seq(1,nOfWindows)),
-                              paste0("End+",seq(1,(nOfWindows*((distanceAround)/100)))))
-    filteredRanges <- c(testRangesPos,testRangesNeg)
-
-    profileSample <- SummarizedExperiment(profileMat,rowRanges=filteredRanges[match(rownames(profileMat),filteredRanges$giID)])
-
-    
-    if(is.null(samplename)){
-      if(format %in% c("rlelist","pwm","granges")){
-        metadata(profileSample)  <- list(names=c("Sample"))
-      }else{
-        metadata(profileSample)<- list(names=c(bamFile),AlignedReadsInBam=totalReads)  
-      }
-    }else{
-      metadata(profileSample)<- list(names=samplename,AlignedReadsInBam=totalReads)
-    }
-    
-    ## Pass parameters
-    
-    paramList <- list("nOfWindows"=nOfWindows,
-                      "style"=style,
-                      "samplename"=samplename,
-                      "nOfWindows"=nOfWindows,
-                      "FragmentLength"=FragmentLength,
-                      "distanceAround"=distanceAround,
-                      "distanceUp"=distanceUp,
-                      "distanceDown"=distanceDown,
-                      "distanceInRegionStart"=distanceInRegionStart,
-                      "distanceInRegionEnd"=distanceInRegionEnd,
-                      "distanceOutRegionStart"=distanceOutRegionStart,
-                      "distanceOutRegionEnd"=distanceOutRegionEnd,
-                      "paired"=paired,
-                      "normalize"=normalize,
-                      "plotBy"=plotBy,
-                      "removeDup"=removeDup,
-                      "format"=format,
-                      "seqlengths"=seqlengths,
-                      "forceFragment"=forceFragment,
-                      "method"=method,
-                      "genome"=genome,
-                      "cutoff"=cutoff,
-                      "minFragmentLength"=minFragmentLength,
-                      "maxFragmentLength"=maxFragmentLength,
-                      "downSample"=downSample
-    )
-    return(new("ChIPprofile",profileSample,params=paramList))
-  } 
-
-  ## Run when style is Region. This style creates a hybrid plot where the edges are presented
-  ## as per base pair but the remaining region is binned to common normalised length.
+  if (length(oob_idx) > 0){
+    filteredRanges <- original_ranges[-oob_idx]
+  } else{
+    filteredRanges <- original_ranges
+  }
   
-  if(style=="region"){
-    
-    message("Defining flanks of regions..",appendLF=FALSE)
-    
-    ##Create GRanges for flanking regions
-    startRegionRangesPos <- GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)-distanceOutRegionStart,start(testRangesPos)+distanceInRegionStart),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
-    endRegionRangesPos <- GRanges(seqnames(testRangesPos),IRanges(end(testRangesPos)-distanceInRegionEnd,end(testRangesPos)+distanceOutRegionEnd),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
-    startRegionRangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(end(testRangesNeg)-distanceInRegionStart,end(testRangesNeg)+distanceOutRegionStart),strand=Rle("+",length(testRangesNeg)),mcols(testRangesNeg))
-    endRegionRangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(start(testRangesNeg)-distanceOutRegionEnd,start(testRangesNeg)+distanceInRegionEnd),strand=Rle("+",length(testRangesNeg)),mcols(testRangesNeg))
-    
-    testRangesPos <- GRanges(seqnames(testRangesPos),IRanges(start(testRangesPos)+distanceInRegionStart,end(testRangesPos)-distanceInRegionEnd),strand=Rle("+",length(testRangesPos)),mcols(testRangesPos))
-    testRangesNeg <- GRanges(seqnames(testRangesNeg),IRanges(start(testRangesNeg)+distanceInRegionEnd,end(testRangesNeg)-distanceInRegionStart),strand=Rle("+",length(testRangesNeg)),mcols(testRangesNeg))     
-    
-    message("...Done")
-    
-    ## Create windows for regions (minus flanking)
-    ## Same method as for percentOfRegion
-    
-    meansList <- vector("numeric")
-    grListWindowsPos <- GRanges()
-    grListWindowsNeg <- GRanges()
-    message("Making windows")
-    
-    
-    
-    if(length(testRangesPos) > 0){
-      grWidths <- width(testRangesPos)  
-      windows <- floor(grWidths%/%nOfWindows)
-      
-      ########################
-#      extraLastWindow <- grWidths%%nOfWindows
-#      addToWindow <- 0
-      
-      ### This is done differently to percentOfRegion style.?
-      
-      ## Create GRanges windows of binned regions
-      
-#      for(i in 1:nOfWindows){
-        
-#        if(i == nOfWindows){
-#          addToWindow <- extraLastWindow 
-#        }
-#        grListWindowsPos <- c(grListWindowsPos,GRanges(seqnames(testRangesPos),IRanges(      
-#          start(testRangesPos)+(windows*(i-1)),
-#          start(testRangesPos)+(windows*i)-1+addToWindow),giID=testRangesPos$giID))
-#      }
-#    }
-#    grListWindowsPos <- grListWindowsPos[order(grListWindowsPos$giID)]
-    
-
-    ###########
+  profileSample <- SummarizedExperiment(mat, rowRanges = filteredRanges)
   
-    
-    extraForWindows <- grWidths%%nOfWindows
-    addToWindow <- 0
-    startPos <- start(testRangesPos)#-(windows/2)
-    rem <- rep(0,length(extraForWindows))
-    rem2 <- NULL
-    message("Windowing positive regions ")
-    for(i in 1:(nOfWindows)){
-      #message("Window", i)
-      rem2 <- rem+((extraForWindows >= i)+0)
-      
-      grListWindowsPos <- c(grListWindowsPos,GRanges(seqnames(testRangesPos),IRanges(      
-        (startPos)+rem+(windows*(i-1)),
-        startPos+(windows*i)-1+rem2),giID=testRangesPos$giID))
-      rem <- rem2
+  if(is.null(samplename)){
+    if(is.character(bamFile)){
+      samplename <- bamFile # give name of file if bam or bigwig
+    } else if (tolower(format) %in% c("granges", "rlelist")){
+      deparse(substitute(bamFile)) #give name of object if granges or rlelist
+    } else {
+      samplename <- "Sample"
     }
-    grListWindowsPos <- grListWindowsPos[order(grListWindowsPos$giID)]
-    
-    
-    ############
-    
-    
-    if(length(testRangesNeg) > 0){
-      grWidths <- width(testRangesNeg)
-      windows <- floor(grWidths%/%nOfWindows)
-#      extraLastWindow <- grWidths%%nOfWindows
-#      addToWindow <- 0
-# 
-#       for(i in 1:nOfWindows){
-#         
-#         if(i == nOfWindows){
-#           addToWindow <- extraLastWindow 
-#         }
-#         grListWindowsNeg <- c(grListWindowsNeg,GRanges(seqnames(testRangesNeg),IRanges(     
-#           end(testRangesNeg)-(windows*i)+1-addToWindow,
-#           end(testRangesNeg)-(windows*(i-1))),giID=testRangesNeg$giID))
-#       }
-#       grListWindowsNeg <- grListWindowsNeg[order(grListWindowsNeg$giID)]
-###########
-
-###########
-
-
-    extraForWindows <- grWidths%%nOfWindows
-    addToWindow <- 0
-    startNeg <- start(testRangesNeg)#-(windows/2)
-    rem <- rep(0,length(extraForWindows))
-    rem2 <- NULL
-    message("Windowing negative regions ")
-    for(i in 1:(nOfWindows)){
-      #message("Window", i)
-      rem2 <- rem+((extraForWindows >= i)+0)
-      
-      grListWindowsNeg <- c(grListWindowsNeg,GRanges(seqnames(testRangesNeg),IRanges(      
-        (startNeg)+rem+(windows*(i-1)),
-        startNeg+(windows*i)-1+rem2),giID=testRangesNeg$giID))
-      rem <- rem2
-    }
-    grListWindowsNeg <- grListWindowsNeg[order(grListWindowsNeg$giID)]
-    
-
-############
-
-############
-
-
-    
-    }
-    grListWindows <- c(grListWindowsPos,grListWindowsNeg)
-
-    message(paste0("Calculating bin scores for regions and per base pair for flanks.                   
-                   \nProcessing per contig"))
+  }
   
-    for(c in 1:length(chromosomes)){
-      
-      message(paste0("contig: ",c))
-      
-      ## Extract mean coverage of Views from Granges of regions
-      
-     # message("Processing inner region windows in ",chromosomes[c])
-      covPerPeak <- Views(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]],ranges(grListWindows[seqnames(grListWindows) == chromosomes[c]]))
-      doubleTemp <- viewMeans(covPerPeak)
-      names(doubleTemp) <- as.vector(grListWindows[seqnames(grListWindows) == chromosomes[c]]$giID)
-      meansList <- c(meansList,doubleTemp)
-      #message("..done")
-      #message("Processing flanking windows in ",chromosomes[c])      
-      
-      ## Perform a point style retrieval of signal from around edges.
-     
-      tempstartRegionRangesPosMat <- NULL
-      tempendRegionRangesPosMat <- NULL  
-      tempstartRegionRangesNegMat <- NULL
-      tempendRegionRangesNegMat <- NULL    
-      
-      if(length(startRegionRangesPos[seqnames(startRegionRangesPos) %in% chromosomes[c]]) > 0){
-        tempstartRegionRangesPosMat <- matrix(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(startRegionRangesPos[seqnames(startRegionRangesPos) %in% chromosomes[c]])]),ncol=mean(width(startRegionRangesPos)),byrow=TRUE)
-        rownames(tempstartRegionRangesPosMat) <- startRegionRangesPos[seqnames(startRegionRangesPos) %in% chromosomes[c]]$giID
-      }
-      
-      if(length(endRegionRangesPos[seqnames(endRegionRangesPos) %in% chromosomes[c]]) > 0){
-        tempendRegionRangesPosMat <- matrix(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(endRegionRangesPos[seqnames(endRegionRangesPos) %in% chromosomes[c]])]),ncol=mean(width(endRegionRangesPos)),byrow=TRUE)
-        rownames(tempendRegionRangesPosMat) <- endRegionRangesPos[seqnames(endRegionRangesPos) %in% chromosomes[c]]$giID
-      }
-      if(length(startRegionRangesNeg[seqnames(startRegionRangesNeg) %in% chromosomes[c]]) > 0){
-        tempstartRegionRangesNegMat <- matrix(rev(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(startRegionRangesNeg[seqnames(startRegionRangesNeg) %in% chromosomes[c]])])),ncol=mean(width(startRegionRangesNeg)),byrow=TRUE)
-        rownames(tempstartRegionRangesNegMat) <- rev(startRegionRangesNeg[seqnames(startRegionRangesNeg) %in% chromosomes[c]]$giID)
-      }
-      if(length(endRegionRangesNeg[seqnames(endRegionRangesNeg) %in% chromosomes[c]]) > 0){
-        tempendRegionRangesNegMat <- matrix(rev(as.vector(genomeCov[[which(names(genomeCov) %in% chromosomes[c])]][ranges(endRegionRangesNeg[seqnames(endRegionRangesNeg) %in% chromosomes[c]])])),ncol=mean(width(endRegionRangesNeg)),byrow=TRUE)
-        rownames(tempendRegionRangesNegMat) <- rev(endRegionRangesNeg[seqnames(endRegionRangesNeg) %in% chromosomes[c]]$giID)
-      }
-      
-      posRegionStartMat <- rbind(posRegionStartMat,tempstartRegionRangesPosMat)
-      posRegionEndMat <- rbind(posRegionEndMat,tempendRegionRangesPosMat)
-      negRegionStartMat <- rbind(negRegionStartMat,tempstartRegionRangesNegMat)
-      negRegionEndMat <- rbind(negRegionEndMat,tempendRegionRangesNegMat)
-      tempstartRegionRangesPosMat <- NULL
-      tempendRegionRangesPosMat <- NULL  
-      tempstartRegionRangesNegMat <- NULL
-      tempendRegionRangesNegMat <- NULL           
-      message("..done")
-    }
-
-    ## Create ChIP profile
-    message("Creating ChIPprofile")
-
-    AllRegionStart <- rbind(posRegionStartMat,negRegionStartMat)
-    AllRegionEnd <- rbind(posRegionEndMat,negRegionEndMat)
-    meansMat <- matrix(meansList,ncol=nOfWindows,byrow=TRUE)
-    rownames(meansMat) <- matrix(names(meansList),ncol=nOfWindows,byrow=TRUE)[,1]
-    start <- cbind(seq(1,length(colMeans(AllRegionStart))),colMeans(AllRegionStart))
-    mid <- cbind(max(start[,1])+seq(1,length(colMeans(meansMat)))*nOfWindows,colMeans(meansMat))
-    end <- cbind(max(mid[,1])+seq(1,length(colMeans(AllRegionEnd))),colMeans(AllRegionEnd))
-    profileMat <- cbind(AllRegionStart[order(rownames(AllRegionStart)),],
-                        meansMat[order(rownames(meansMat)),],
-                        AllRegionEnd[order(rownames(AllRegionEnd)),])
-    colnames(profileMat) <- c(paste0("Region_Start",seq(0-distanceOutRegionStart,-1)),"Region_Start",paste0("Region_Start",seq(1,distanceInRegionStart)),
-    paste0(seq(1,nOfWindows),"%_ofRegion"),
-    paste0("Region_End",seq(0-distanceInRegionEnd,-1)),"Region_End",paste0("Region_End",seq(1,distanceOutRegionEnd))
-    )
-    filteredRanges <- c(testRangesPos,testRangesNeg)
-    profileSample <- SummarizedExperiment(profileMat,rowRanges=filteredRanges[match(rownames(profileMat),filteredRanges$giID)])
-    print(format)
-
-    if(is.null(samplename)){
-      if(format %in% c("rlelist","pwm","granges")){
-        metadata(profileSample)  <- list(names=c("Sample"))
-      }else{
-        metadata(profileSample)<- list(names=c(bamFile),AlignedReadsInBam=totalReads)  
-      }
-    }else{
-      metadata(profileSample)<- list(names=samplename,AlignedReadsInBam=totalReads)
-    }
-    
-    ## Pass parameters
-    
-    paramList <- list("nOfWindows"=nOfWindows,
-                      "style"=style,
-                      "samplename"=samplename,
-                      "nOfWindows"=nOfWindows,
-                      "FragmentLength"=FragmentLength,
-                      "distanceAround"=distanceAround,
-                      "distanceUp"=distanceUp,
-                      "distanceDown"=distanceDown,
-                      "distanceInRegionStart"=distanceInRegionStart,
-                      "distanceInRegionEnd"=distanceInRegionEnd,
-                      "distanceOutRegionStart"=distanceOutRegionStart,
-                      "distanceOutRegionEnd"=distanceOutRegionEnd,
-                      "paired"=paired,
-                      "normalize"=normalize,
-                      "plotBy"=plotBy,
-                      "removeDup"=removeDup,
-                      "format"=format,
-                      "seqlengths"=seqlengths,
-                      "forceFragment"=forceFragment,
-                      "method"=method,
-                      "genome"=genome,
-                      "cutoff"=cutoff,
-                      "minFragmentLength"=minFragmentLength,
-                      "maxFragmentLength"=maxFragmentLength,
-                      "downSample"=downSample
-    )
-    return(new("ChIPprofile",profileSample,params=paramList))
-        
-    } 
-
+  names(assays(profileSample)) <- samplename
+  
+  paramList <- list(samplename = samplename,
+                    #region options
+                    style = style,
+                    method = method, binMethod = binMethod, nOfWindows = nOfWindows, 
+                    expand = expand, flank = flank, flankUp = flankUp, flankDown = flankDown, 
+                    #import options
+                    format = format, paired= paired, removeDup = removeDup, 
+                    FragmentLength = FragmentLength, forceFragment = forceFragment, 
+                    minFragmentLength = minFragmentLength, maxFragmentLength = maxFragmentLength,
+                    normalize = normalize, downSample = downSample,
+                    seqlengths = seqlengths, 
+                    #pwm options
+                    genome = genome, cutoff = cutoff)
+  
+  return(new("ChIPprofile",profileSample,params=paramList))
 }
-}
+
+
+
+
+
+
+
 
 #' Make ranges for data import
 
@@ -980,6 +368,80 @@ split_ranges <- function(testRanges, flank = NULL, flankUp = NULL, flankDown = N
   orig_ranges <- testRanges
   start(orig_ranges) <- orig_start
   end(orig_ranges) <- orig_end
-  
+   
   return(list(up_ranges, orig_ranges, down_ranges))
 }
+
+## run this function per chromosome and then combine matrices?
+extract_data_in_ranges <- function(testRanges, genomeCov, method = "bin", binMethod = "mean", nOfWindows = 100){
+  if (is.null(method)){
+    # subset coverage, make vector, return to rbind
+    mat <- do.call("rbind", lapply(genomeCov[testRanges], as.vector))
+    
+  } else if (method == "spline"){
+    
+    mat <- do.call("rbind", lapply(genomeCov[testRanges], function(x){
+      spline(as.vector(x), n = nOfWindows)$y
+    }))
+    
+  } else if (method == "bin"){
+    stop("not yet implemented!")
+    #     
+    #     #calculate bin size including final bin which may be different
+    #     window_size <- width(testRanges) %/% nOfWindows
+    #     remainder <- width(testRanges) %% nOfWindows
+    #     
+    #     if any((remainder > window_size)){
+    #       warning(paste0("Final bin size (", window_size + remainder,
+    #                      " bp) is more than twice the size of other bins (", window_size,
+    #                      " bp); consider using 'spline' method instead"))
+    #     }
+    #     
+    #     binstarts <- seq(from = start(testRange), by = window_size, length.out = nOfWindows)
+    #     binends <- c(seq(from = start(testRange) + window_size - 1, by = window_size, 
+    #                      length.out = nOfWindows - 1), end(testRange))
+    #     
+    #     bins <- GRanges(seqnames = seqnames(testRange),
+    #                     ranges = IRanges(start = binstarts, end = binends))
+    #     
+    #     bin_cov <- genomeCov[bins]
+    #     vec_list <- lapply(unname(bin_cov), as.vector)
+    #     
+    #     vec <- vapply(vec_list, binMethod, FUN.VALUE = numeric(1))
+    #     #binMethod can be any function that returns a single value
+    #     #how to get a more useful error message here??
+    #     
+  } else { 
+    stop(paste0("method '", method, 
+                "' not recognised! Must be NULL for base-pair resolution,, 'bin', or 'spline'."))
+  }
+  
+  rownames(mat) <- testRanges$original_order
+  return(mat)
+}
+
+
+name_cols <- function(mat, style = "region", method = NULL, expand = NULL, flank = NULL, 
+                      flankUp = NULL, flankDown = NULL){
+  
+  if(style == "centered"){
+    col_names <- seq(-(expand/2), expand/2, length.out = ncol(mat))
+    col_names <- paste(col_names, "bp")
+    
+  } else if (style == "region"){
+    col_names <- seq(-(ncol(mat)/2), ncol(mat/2), length.out = ncol(mat))
+    
+    if (is.null(method)){
+      col_names <- paste(col_names, "bp")
+    } else {
+      col_names <- paste(col_names, "bins")
+    }
+  } else if (style == "flank"){
+    
+    col_names <- seq(-(ncol(mat)/2), ncol(mat/2), length.out = ncol(mat))
+    
+  }
+  
+  
+}
+
