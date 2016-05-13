@@ -34,7 +34,13 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   #removeDup=F  
   #format="bigwig"
   #seqlengths=NULL
+  if(file.exists(bamFile) & length(index(BamFile(bamFile))) == 0){
+    message("Creating index for ",bamFile)
+    indexBam(bamFile)
+    message("..done")
+  }
   
+  testRanges <- GetGRanges(testRanges)
   ## Check parameters
   if(style != "percentOfRegion"){
     if(is.null(distanceAround)){
