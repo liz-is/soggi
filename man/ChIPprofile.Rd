@@ -9,10 +9,10 @@
 \title{The soggi function and ChIPprofile object.}
 \usage{
 regionPlot(bamFile, testRanges, samplename = NULL, nOfWindows = 100,
-  FragmentLength = 150, style = "point", distanceAround = 1500,
-  distanceUp = 1500, distanceDown = 1500, distanceInRegionStart = 1500,
-  distanceOutRegionStart = 1500, distanceInRegionEnd = 1500,
-  distanceOutRegionEnd = 1500, paired = FALSE, normalize = "RPM",
+  FragmentLength = 150, style = "point", distanceAround = NULL,
+  distanceUp = NULL, distanceDown = NULL, distanceInRegionStart = NULL,
+  distanceOutRegionStart = NULL, distanceInRegionEnd = NULL,
+  distanceOutRegionEnd = NULL, paired = FALSE, normalize = "RPM",
   plotBy = "coverage", removeDup = FALSE, verbose = TRUE,
   format = "bam", seqlengths = NULL, forceFragment = NULL,
   method = "bin", genome = NULL, cutoff = 80, downSample = NULL,

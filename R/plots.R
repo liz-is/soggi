@@ -94,7 +94,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
                       seq(1,(object@params$distanceInRegionEnd+object@params$distanceOutRegionEnd+1)))
       }
       if(object@params$style=="point"){
-        axisIndex=c(seq(1,(object@params$distanceAround+object@params$distanceAround+1)))
+        axisIndex=c(seq(1,(object@params$distanceUp+object@params$distanceDown+1)))
       }
       if(object@params$style=="percentOfRegion"){
         axisIndex=c(seq(1,((nOfWindows*((object@params$distanceAround)/100))*2)+nOfWindows))
@@ -142,7 +142,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
                     seq(1,(object@params$distanceInRegionEnd+object@params$distanceOutRegionEnd+1)))
     }
     if(object@params$style=="point"){
-      axisIndex=c(seq(1,(object@params$distanceAround+object@params$distanceAround+1)))
+      axisIndex=c(seq(1,(object@params$distanceUp+object@params$distanceDown+1)))
     }
     if(object@params$style=="percentOfRegion"){
       axisIndex=c(seq(1,((nOfWindows*((object@params$distanceAround)/100))*2)+nOfWindows))
@@ -185,7 +185,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
                     seq(1,(object@params$distanceInRegionEnd+object@params$distanceOutRegionEnd+1)))
     }
     if(object@params$style=="point"){
-      axisIndex=c(seq(1,(object@params$distanceAround+object@params$distanceAround+1)))
+      axisIndex=c(seq(1,(object@params$distanceUp+object@params$distanceDown+1)))
     }
     if(object@params$style=="percentOfRegion"){
       axisIndex=c(seq(1,((object@params$nOfWindows*((object@params$distanceAround)/100))*2)+object@params$nOfWindows))
@@ -231,8 +231,8 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
       theme(axis.text.x  = element_text(angle=45, vjust=0.5, size=12))
   }
   if(object@params$style=="point"){
-    P <- P + scale_x_continuous(breaks=c(1,object@params$distanceAround+1,object@params$distanceAround+1+object@params$distanceAround),
-                              labels=c(paste0("Centre-",object@params$distanceAround),"Centre",paste0("Centre+",object@params$distanceAround)))+
+    P <- P + scale_x_continuous(breaks=c(1,object@params$distanceUp+1,object@params$distanceUp+1+object@params$distanceDown),
+                              labels=c(paste0("Centre-",object@params$distanceUp),"Centre",paste0("Centre+",object@params$distanceDown)))+
       theme(axis.text.x  = element_text(angle=45, vjust=0.5, size=12))
   }
   if(object@params$style=="percentOfRegion"){
@@ -248,13 +248,13 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
   }  
   if(object@params$style=="region" & plotregion =="start"){
     P <- P + scale_x_continuous(breaks=c(1,object@params$distanceOutRegionStart+1,object@params$distanceInRegionStart+1+object@params$distanceOutRegionStart),
-                              labels=c("Start-1500","Centre","Start+1500"),
+                              labels=c(paste0("Start-",object@params$distanceOutRegionStart),"Centre",paste0("Start-",object@params$distanceInRegionStart)),
                               limits=c(1,object@params$distanceInRegionStart+1+object@params$distanceOutRegionStart))+
       theme(axis.text.x  = element_text(angle=45, vjust=0.5, size=12))    
   }
   if(object@params$style=="region" & plotregion =="end"){
     P <- P + scale_x_continuous(breaks=(object@params$distanceOutRegionStart+object@params$distanceInRegionStart+1)+(object@params$nOfWindows*100)+c(1,object@params$distanceInRegionEnd+1,object@params$distanceInRegionEnd+1+object@params$distanceOutRegionEnd),
-                              labels=c("End-1500","Centre","End+1500"),
+                              labels=c(paste0("Start-",object@params$distanceInRegionEnd),"Centre",paste0("Start-",object@params$distanceOutRegionEnd)),
                               limits=(object@params$distanceOutRegionStart+object@params$distanceInRegionStart+1)+(object@params$nOfWindows*100)+c(1,object@params$distanceInRegionEnd+1+object@params$distanceOutRegionEnd))+
                                 theme(axis.text.x  = element_text(angle=45, vjust=0.5, size=12))    
   } 

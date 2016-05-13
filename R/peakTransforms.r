@@ -95,7 +95,7 @@ summitPipeline <- function(reads,peakfile,fragmentLength,readlength){
   if(class(reads) == "character"){
     message("Reading in alignments..",appendLF=FALSE)
     ChrLengths <- scanBamHeader(reads)[[1]]$targets
-    reads <- readGAlignments(reads)
+    reads <- readGAlignmentsFromBam(reads)
     message("done") 
   }
   message("Calculating fragmentlength..",appendLF=FALSE)
@@ -146,7 +146,7 @@ return(ShiftsTemp)
 getShifts <- function(reads,ChrLengths,
                       shiftWindowStart=1,shiftWindowEnd=400){
   if(is.character(reads)){
-    reads <- readGAlignments(reads)
+    reads <- readGAlignmentsFromBam(reads)
   }  
 shiftMat <- do.call(cbind,bplapply(names(ChrLengths),function(x)
 runGetShifts(reads[seqnames(reads) %in% x],ChrLengths,x,
@@ -163,7 +163,7 @@ getFragmentLength <- function(x,readLength){
   
 runFindSummit <- function(testRanges,reads,fragmentLength=NULL){
   if(is.character(reads)){
-    reads <- readGAlignments(reads)
+    reads <- readGAlignmentsFromBam(reads)
   }
   if(!is.null(fragmentLength)){
     message("Extending reads to fragmentlength of ",fragmentLength,"..",appendLF=FALSE)
@@ -182,7 +182,7 @@ runFindSummit <- function(testRanges,reads,fragmentLength=NULL){
 
 getSummitScore <- function(reads,summits,fragmentLength=NULL,score="height"){
   if(is.character(reads)){
-    reads <- readGAlignments(reads)
+    reads <- readGAlignmentsFromBam(reads)
   }
   if(!is.null(fragmentLength)){
     message("Extending reads to fragmentlength of ",fragmentLength,"..",appendLF=FALSE)

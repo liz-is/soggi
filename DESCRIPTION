@@ -2,7 +2,7 @@ Package: soGGi
 Type: Package
 Title: Visualise ChIP-seq, MNase-seq and motif occurrence as aggregate
         plots Summarised Over Grouped Genomic Intervals
-Version: 1.4.1
+Version: 1.4.2
 Date: 2015-12-02
 Author: Gopuraja Dharmalingam, Tom Carroll
 Maintainer: Tom Carroll <tc.infomatics@gmail.com>
@@ -23,10 +23,11 @@ License: GPL (>= 3)
 LazyLoad: yes
 Depends: R (>= 3.2.0), BiocGenerics, SummarizedExperiment
 Imports: methods, reshape2, ggplot2, S4Vectors, IRanges, GenomeInfoDb,
-        GenomicRanges, Biostrings, Rsamtools, GenomicAlignments, rtracklayer,
-        preprocessCore, chipseq, BiocParallel
+        GenomicRanges, Biostrings, Rsamtools, GenomicAlignments,
+        rtracklayer, preprocessCore, chipseq, BiocParallel
 Collate: 'allClasses.r' 'motifTools.R' 'peakTransforms.r' 'plots.R'
-        'tracktables.R'
+        'soggi.R'
 VignetteBuilder: knitr
 Suggests: testthat, BiocStyle, knitr
 NeedsCompilation: no
+Packaged: 2016-05-12 05:24:18 UTC; biocbuild
