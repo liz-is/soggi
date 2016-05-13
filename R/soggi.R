@@ -5,7 +5,7 @@
 #' @export
 #' @import methods reshape2 ggplot2 BiocGenerics S4Vectors IRanges GenomeInfoDb GenomicRanges Biostrings Rsamtools GenomicAlignments rtracklayer preprocessCore chipseq BiocParallel
 #' @include allClasses.r plots.R peakTransforms.r
-regionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=1500,distanceUp=1500,distanceDown=1500,distanceInRegionStart=1500,distanceOutRegionStart=1500,distanceInRegionEnd=1500,distanceOutRegionEnd=1500,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,verbose=TRUE,format="bam",seqlengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
+regionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=NULL,distanceUp=NULL,distanceDown=NULL,distanceInRegionStart=NULL,distanceOutRegionStart=NULL,distanceInRegionEnd=NULL,distanceOutRegionEnd=NULL,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,verbose=TRUE,format="bam",seqlengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
   if(!verbose){
     suppressMessages(runRegionPlot())
   }
@@ -13,7 +13,7 @@ regionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Fragmen
   return(result)  
 }
 
-runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=1500,distanceUp=1500,distanceDown=1500,distanceInRegionStart=1500,distanceOutRegionStart=1500,distanceInRegionEnd=1500,distanceOutRegionEnd=1500,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,format="bam",seqlengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
+runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=NULL,distanceUp=NULL,distanceDown=NULL,distanceInRegionStart=NULL,distanceOutRegionStart=NULL,distanceInRegionEnd=NULL,distanceOutRegionEnd=NULL,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,format="bam",seqlengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
 
   #bamFile <- "/home//pgellert/Dropbox (Lymphocyte_Developme)/WeiWeiLiang/RNAPII/Sample_R1-0hDupMarked.bam"
   #bamFile <-"Downloads//mergedETOH.bwRange5.bw"
@@ -36,8 +36,40 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   #seqlengths=NULL
   
   ## Check parameters
+  if(style != "percentOfRegion"){
+    if(is.null(distanceAround)){
+      distanceAround = 1500
+    }
+    if(is.null(distanceUp)){
+      distanceUp <- distanceAround
+    }
+    if(is.null(distanceDown)){
+      distanceDown <- distanceAround
+    }
+  }else{
+    if(is.null(distanceAround)){
+      distanceAround = 100
+    }
+    if(is.null(distanceUp)){
+      distanceUp <- distanceAround
+    }
+    if(is.null(distanceDown)){
+      distanceDown <- distanceAround
+    }
+  }
   
-  
+  if(is.null(distanceInRegionStart)){
+    distanceInRegionStart=750
+  }
+  if(is.null(distanceOutRegionStart)){
+    distanceOutRegionStart=1500
+  }
+  if(is.null(distanceInRegionEnd)){
+    distanceInRegionStart=750
+  }
+  if(is.null(distanceOutRegionEnd)){
+    distanceInRegionStart=1500
+  }
   
   ## Initialize empty matrices and paramaters for collecting coverage analysis
   ## Find maximum distance to use for filtering out of bounds extended GRanges
@@ -56,8 +88,9 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   if(style == "point"){
     PosRegionMat <- NULL
     NegRegionMat <- NULL
-    RegionsMat <- NULL    
-    maxDistance <- distanceAround
+    RegionsMat <- NULL
+    whatIsMax <- max(distanceAround,distanceUp,distanceDown)
+    maxDistance <- whatIsMax
     distanceUpStart <- distanceUp
     distanceDownEnd <- distanceDown    
   }
