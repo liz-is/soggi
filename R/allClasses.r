@@ -33,7 +33,7 @@
 #' @param plotBy Score to be used for plotting. Presently only coverage.
 #' @param removeDup Remove duplicates before calculating coverage.
 #' @param verbose TRUE or FALSE
-#' @param format character vector of "BAM", "BigWig", "RleList" or "PWM"
+#' @param format character vector of "bam", "bigwig", "RleList" or "PWM"
 #' @param seqlengths Chromosomes to be used. If missing will report all.
 #' @param forceFragment Centre fragment and force consistent fragment width.
 #' @param method Character vector of value "bp","bin" or "spline". 

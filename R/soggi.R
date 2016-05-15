@@ -13,7 +13,7 @@ regionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Fragmen
   return(result)  
 }
 
-runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=NULL,distanceUp=NULL,distanceDown=NULL,distanceInRegionStart=NULL,distanceOutRegionStart=NULL,distanceInRegionEnd=NULL,distanceOutRegionEnd=NULL,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,format="bam",seqlengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
+runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,FragmentLength=150,style="point",distanceAround=NULL,distanceUp=NULL,distanceDown=NULL,distanceInRegionStart=NULL,distanceOutRegionStart=NULL,distanceInRegionEnd=NULL,distanceOutRegionEnd=NULL,paired=FALSE,normalize="RPM",plotBy="coverage",removeDup=FALSE,format="bam",seqLengths=NULL,forceFragment=NULL,method="bin",genome=NULL,cutoff=80,downSample=NULL,minFragmentLength=NULL,maxFragmentLength=NULL){
 
   #bamFile <- "/home//pgellert/Dropbox (Lymphocyte_Developme)/WeiWeiLiang/RNAPII/Sample_R1-0hDupMarked.bam"
   #bamFile <-"Downloads//mergedETOH.bwRange5.bw"
@@ -32,12 +32,33 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   #normalize="RPM"
   #plotBy="coverage"
   #removeDup=F  
-  #format="bigwig"
-  #seqlengths=NULL
-  if(file.exists(bamFile) & length(index(BamFile(bamFile))) == 0){
-    message("Creating index for ",bamFile)
-    indexBam(bamFile)
-    message("..done")
+  # format="bigwig"
+  # seqLengths=NULL
+  # testRanges <- "~/Downloads/randomTracks/Myc_WithInput_Input_Ch12_peaks.bed"
+  # bamFile <- "~/Downloads/randomTracks/MycDupMarkedNormalised.bw"
+  # nOfWindows=100
+  # FragmentLength=150
+  # style="point"
+  # distanceAround=NULL
+  # distanceUp=NULL
+  # distanceDown=NULL
+  # distanceInRegionStart=NULL
+  # distanceOutRegionStart=NULL
+  # distanceInRegionEnd=NULL
+  # distanceOutRegionEnd=NULL 
+  # GetGRanges <- function(...){soGGi:::GetGRanges(...)}
+  # require(rtracklayer)
+  # 
+  if(!is.null(seqLengths)){
+    lengths <- seqLengths
+  }
+  
+  if(format == "bam"){
+    if(file.exists(bamFile) & length(index(BamFile(bamFile))) == 0){
+      message("Creating index for ",bamFile)
+      indexBam(bamFile)
+      message("..done")
+    }
   }
   
   testRanges <- GetGRanges(testRanges)
@@ -128,7 +149,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   if(format=="bigwig"){
     message("Importing BigWig...",appendLF = FALSE)
     genomeCov <- import.bw(bamFile,as = "RleList")
-    if(is.null(seqlengths)){
+    if(is.null(seqLengths)){
       seqlengths(genomeCov) <- unlist(lapply(genomeCov,length))
     }else{
       seqlengths(genomeCov)[match(names(lengths),names(genomeCov))] <- lengths
@@ -157,7 +178,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
   if(format=="rlelist"){
     message("Importing rlelist",appendLF = FALSE)
     genomeCov <- bamFile
-    if(is.null(seqlengths)){
+    if(is.null(seqLengths)){
       seqlengths(genomeCov) <- unlist(lapply(genomeCov,length))
     }else{
       seqlengths(genomeCov)[match(names(lengths),names(genomeCov))] <- lengths
@@ -400,7 +421,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
                       "plotBy"=plotBy,
                       "removeDup"=removeDup,
                       "format"=format,
-                      "seqlengths"=seqlengths,
+                      "seqlengths"=seqLengths,
                       "forceFragment"=forceFragment,
                       "method"=method,
                       "genome"=genome,
@@ -514,7 +535,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
                         "plotBy"=plotBy,
                         "removeDup"=removeDup,
                         "format"=format,
-                        "seqlengths"=seqlengths,
+                        "seqlengths"=seqLengths,
                         "forceFragment"=forceFragment,
                         "method"=method,
                         "genome"=genome,
@@ -746,7 +767,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
                       "plotBy"=plotBy,
                       "removeDup"=removeDup,
                       "format"=format,
-                      "seqlengths"=seqlengths,
+                      "seqlengths"=seqLengths,
                       "forceFragment"=forceFragment,
                       "method"=method,
                       "genome"=genome,
@@ -986,7 +1007,7 @@ runRegionPlot <- function(bamFile,testRanges,samplename=NULL,nOfWindows=100,Frag
                       "plotBy"=plotBy,
                       "removeDup"=removeDup,
                       "format"=format,
-                      "seqlengths"=seqlengths,
+                      "seqlengths"=seqLengths,
                       "forceFragment"=forceFragment,
                       "method"=method,
                       "genome"=genome,

@@ -318,3 +318,64 @@ subsetProfile <- function(profile,group,granges,summariseColumn){
     return(profile[granges %over% group,])
   }
 }
+
+
+plotHeatmap <- function(profile,bins=100,col=heat.colors(100),
+                        rowScale=TRUE,orderPosition=NULL,orderBy="maxAtPosition",...){
+  matt <- assay(profile)
+  if(is.null(orderPosition)){
+    if(is.null(bins)){
+      orderPosition <- unique(c(floor(bins/2),ceiling(bins/2)))
+    }else{
+      orderPosition <- unique(c(floor(bins/2),ceiling(bins/2)))
+    }
+  }
+  if(rowScale == TRUE){
+    cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=1)(100)
+  }else{
+    cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=10)(100)
+  }
+  
+  if(!is.null(bins)){
+    binsize <- floor(ncol(assay(profile))/bins)
+    binremainner <- ncol(matt)%%bins
+    mat <- matrix(nrow=nrow(matt),ncol=bins)
+    firstIndex <- 0
+    endIndex <- floor(binsize/2)+binsize
+    mat[,1] <- rowMeans(matt[,firstIndex:endIndex])
+    for(i in 2:(bins-1)){
+      firstIndex <- endIndex+1
+      endIndex <- endIndex+binsize
+      mat[,i] <- rowMeans(matt[,firstIndex:endIndex])
+    }
+    
+    mat[,i+1] <- rowMeans(matt[,endIndex:ncol(matt)])
+    matt <- mat
+  }else{
+    message("No binning of matrix done")
+  }
+  if(rowScale==TRUE){
+    matt <- t(scale(t(matt),center=TRUE,scale=TRUE))
+  }
+  if(orderBy=="maxAtPosition"){
+      if(length(orderPosition) == 1){
+          matt <- matt[order(matt[,orderPosition],decreasing=FALSE),]
+      }else{
+          matt <- matt[order(rowMeans(matt[,min(orderPosition):max(orderPosition)]),decreasing=FALSE),]
+      } 
+      
+  }
+  layout(matrix(data=c(1,2), nrow=1, ncol=2),
+         widths=c(4,1), heights=c(1,1))
+  image(t(matt),useRaster=TRUE,
+        xaxt='n',yaxt="n",col=col)
+
+  par(mar = c(3,2.5,2.5,2))
+  image(1, 1:length(col),
+        matrix(data=seq(min(matt),max(matt),
+                        length=length(col)),ncol=length(col),
+                        nrow=1),
+               xlab="",ylab="",xaxt="n",las=2,col=col)
+  return(matt)
+  }
+
