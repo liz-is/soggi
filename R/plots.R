@@ -330,11 +330,11 @@ plotHeatmap <- function(profile,bins=100,col=heat.colors(100),
       orderPosition <- unique(c(floor(bins/2),ceiling(bins/2)))
     }
   }
-  if(rowScale == TRUE){
-    cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=1)(100)
-  }else{
-    cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=10)(100)
-  }
+  # if(rowScale == TRUE){
+  #   cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=1)(100)
+  # }else{
+  #   cols <- colorRampPalette(brewer.pal(9,"Blues"),bias=10)(100)
+  # }
   
   if(!is.null(bins)){
     binsize <- floor(ncol(assay(profile))/bins)
