@@ -320,14 +320,47 @@ subsetProfile <- function(profile,group,granges,summariseColumn){
 }
 
 
-plotHeatmap <- function(profile,bins=100,col=heat.colors(100),
+#' Plot heatmaps
+#'
+#' A function to plot heatmaps
+#' 
+#' @usage
+#' \S4method{plotHeatmap}{ChIPprofile}(object,bins=100,col=heat.colors(100), 
+#' rowScale=TRUE,orderPosition=NULL,orderBy="maxAtPosition",...)
+#'
+#'
+#' @docType methods
+#' @name plotHeatmap
+#' @rdname plotHeatmap
+#' @aliases plotHeatmap plotHeatmap,ChIPprofile-method
+#' 
+#' @author Thomas Carroll
+#'
+#' @param object A ChIPprofile object 
+#' @param bins Numeric vector of number of bins to summarise columns over (Useful for full resolution "profile" styles). 
+#' Default is 100. Set to NULL for no binning to be performed 
+#' Useful for comparing multiple samples of differing depths without normalisation. Default is FALSE.
+#' @param col Colour scale to use for heatmap.
+#' @param rowScale TRUE or FALSE. Perform row centering and scaling. Default is TRUE.
+#' @param orderPosition Numeric vector of positions used for sorting when orderBy is set to "maxAtPosition".
+#' May be single value specifying index for ordering or vector of numeric values where maximum and minimum index positions
+#' specify an index range used for sorting.
+#' @param orderBy Character specifing method for heatmap row ordering. At present only "maxAtPosition".
+#' @param ... Additional arguments passed to image()
+#' maxAtPosition method - Order heatmap by score at index specified in orderPosition. Ordered from maximum to minimum.
+#' @return  A matrix of values displayed in heatmap
+#' @examples
+#' data(chipExampleBig)
+#' plotHeatmap(log(chipExampleBig),orderPosition=c(100:200),bins=NULL,col=topo.colors(100))
+plotHeatmap.ChIPprofile <- function(object,bins=100,col=heat.colors(100),
                         rowScale=TRUE,orderPosition=NULL,orderBy="maxAtPosition",...){
-  matt <- assay(profile)
+  matt <- assay(object)
   if(is.null(orderPosition)){
     if(is.null(bins)){
-      orderPosition <- unique(c(floor(bins/2),ceiling(bins/2)))
+      orderPosition <- unique(c(floor(ncol(matt)/2),ceiling(ncol(matt)/2)))
     }else{
       orderPosition <- unique(c(floor(bins/2),ceiling(bins/2)))
+      
     }
   }
   # if(rowScale == TRUE){
@@ -337,7 +370,7 @@ plotHeatmap <- function(profile,bins=100,col=heat.colors(100),
   # }
   
   if(!is.null(bins)){
-    binsize <- floor(ncol(assay(profile))/bins)
+    binsize <- floor(ncol(matt)/bins)
     binremainner <- ncol(matt)%%bins
     mat <- matrix(nrow=nrow(matt),ncol=bins)
     firstIndex <- 0
@@ -379,3 +412,7 @@ plotHeatmap <- function(profile,bins=100,col=heat.colors(100),
   return(matt)
   }
 
+setGeneric("plotHeatmap", function(object="ChIPprofile",bins="numeric",col="character",rowScale=TRUE,orderPosition=NULL,orderBy="character",...)standardGeneric("plotHeatmap"))
+#' @rdname plotHeatmap
+#' @export
+setMethod("plotHeatmap", signature(object="ChIPprofile"), plotHeatmap.ChIPprofile)
