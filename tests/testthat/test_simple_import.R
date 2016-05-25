@@ -32,3 +32,7 @@ expect_equal(res_ranges3, make_ranges(testRanges = test_ranges, style = "flanked
                                       flankUp = 50, flankDown = 0))
 
 expect_error(make_ranges(testRanges = test_ranges, style = "kittens"))
+
+####
+
+expect_equal(sort(reduce(c(up_ranges, orig_ranges, down_ranges))), sort(testRanges))
