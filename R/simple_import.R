@@ -1,3 +1,5 @@
+#' @export
+
 simpleImport <- function(bamFile, testRanges, samplename=NULL, 
                          #region options
                          style="region",
