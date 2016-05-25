@@ -47,9 +47,11 @@ Collate:
     'plots.R'
     'simple_import.R'
     'tracktables.R'
+    'utils.R'
 VignetteBuilder: knitr
 Suggests:
     testthat,
     BiocStyle,
     knitr
 NeedsCompilation: no
+RoxygenNote: 5.0.1
