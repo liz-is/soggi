@@ -12,13 +12,15 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
                          #pwm options
                          genome=NULL, cutoff=80){
   ### TO DO: parameter checking here
-  # style
-  # method
-  # format
-  
+  check_params(style, c("region", "centered", "flank"))
+  if (!is.null(method)){
+    check_params(method, c("bin", "spline"))
+  }
+  format <- tolower(format)
+  check_params(format, c("bam", "bigwig", "bw", "pwm", "rlelist", "granges"))
   
   ## If format is bam, read header and get contig information
-  if(tolower(format) == "bam"){
+  if(format == "bam"){
     ## Get all chromosomes in bamFile
     message("Reading Bam header information...",appendLF = FALSE)
     allchrs <- names(scanBamHeader(bamFile)[[1]]$targets)
@@ -29,9 +31,9 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
   
   ## For remaining formats import data and find contig information
   # Import bigwig.
-  if(tolower(format) %in% c("bigwig", "bw")){
+  if(format %in% c("bigwig", "bw")){
     message("Importing BigWig...",appendLF = FALSE)
-    genomeCov <- import.bw(bamFile,as = "RleList")
+    genomeCov <- import.bw(bamFile, as = "RleList")
     if(is.null(seqlengths)){
       seqlengths(genomeCov) <- unlist(lapply(genomeCov,length))
     }else{
@@ -45,20 +47,20 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
     message("..Done")
   }
   
-  # If format is pwm PWM, calculate motifs on forward and reverse strand.
+  # If format is pwm, calculate motifs on forward and reverse strand.
   if(format=="pwm"){
     bamFile <- pwmToCoverage(bamFile,genome,min=cutoff,removeRand=FALSE)
     format <- "rlelist"   
   }
   
   # If format is granges, simply covert to coverage (This would work for GenomicInterval or GenomicAlignments)
-  if(tolower(format)=="granges"){
+  if(format=="granges"){
     genomeCov <- coverage(bamFile)
     format <- "rlelist"   
   }  
   
   # If format is rlelist, import rle and set widths/contigs by seqlengths.
-  if(tolower(format)=="rlelist"){
+  if(format=="rlelist"){
     message("Importing rlelist",appendLF = FALSE)
     genomeCov <- bamFile
     if(is.null(seqlengths)){
@@ -85,14 +87,12 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
   message("Filtering regions which extend outside of genome boundaries...",appendLF = FALSE)
   chr_lengths <- lengths[as.vector(seqnames(testRanges))]
   oob_idx <- which(end(testRanges) > chr_lengths | start(testRanges) < 0)
+  message("..Done")
   if (length(oob_idx) > 0){
     testRanges <- testRanges[-oob_idx]
     message(paste("Filtered regions with indexes:", paste(oob_idx, collapse= ", ")))
   }
   message("Filtered ", length(oob_idx)," of ",length(original_ranges)," regions")
-  
-  message("..Done")
-  
   
   # if style is flank, flanks are specified in bp, and  regions are not of equal width,
   # split ranges out into region plus left and right flanks
@@ -225,30 +225,36 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
     allchrs <- names(lengths)
     message("..done")
   }
-  chromosomes <- seqlevels(genomeCov) 
-
+  
+  chrs_to_use <- intersect(unique(seqnames(testRanges)), unique(names(genomeCov)))
+  message("Filtering data to only common chrs: ", paste(chrs_to_use, collapse = ", "))
+  testRanges <- testRanges[seqnames(testRanges) %in% chrs_to_use]
+  genomeCov <- genomeCov[chrs_to_use]
+  
+  message("Extracting coverage data...")
   mat <- extract_data_in_ranges(testRanges, genomeCov, method = method, 
                                 binMethod = binMethod, nOfWindows = nOfWindows)
   
+  message("Processing matrix and creating ChIPprofile object...")
   if(strand.aware == TRUE){
     mat[which(strand(testRanges)=="-"),] <- mat[which(strand(testRanges)=="-"), ncol(mat):1] #flip rows
-    
   }
   
   colnames(mat) <- 1:ncol(mat)
  
   if (length(oob_idx) > 0){
     filteredRanges <- original_ranges[-oob_idx]
+    filteredRanges <- filteredRanges[seqnames(filteredRanges) %in% chrs_to_use]
   } else{
-    filteredRanges <- original_ranges
+    filteredRanges <- original_ranges[seqnames(original_ranges) %in% chrs_to_use]
   }
-  
+
   profileSample <- SummarizedExperiment(mat, rowRanges = filteredRanges)
   
   if(is.null(samplename)){
     if(is.character(bamFile)){
       samplename <- bamFile # give name of file if bam or bigwig
-    } else if (tolower(format) %in% c("granges", "rlelist")){
+    } else if (format %in% c("granges", "rlelist")){
       deparse(substitute(bamFile)) #give name of object if granges or rlelist
     } else {
       samplename <- "Sample"
@@ -271,14 +277,9 @@ simpleImport <- function(bamFile, testRanges, samplename=NULL,
                     #pwm options
                     genome = genome, cutoff = cutoff)
   
+  message("Done!")
   return(new("ChIPprofile",profileSample,params=paramList))
 }
-
-
-
-
-
-
 
 
 #' Make ranges for data import
