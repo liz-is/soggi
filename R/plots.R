@@ -26,7 +26,7 @@
 #' summariseBy can not be used injustion with groups specified by gts argument.
 #' @param colourBy Character vector or formula of either column names from colData(object) containing
 #' sample metadata or character vector "group" to colour by groups in gts
-#' @param lineBy Character vector or formula of either column names from colData(object) containing
+#' @param lineBy Character vector or foarmula of either column names from colData(object) containing
 #' sample metadata or character vector "group" to set line type by groups in gts
 #' @param groupBy Character vector or formula of either column names from colData(object) containing
 #' sample metadata or character "group" to colour by groups in gts
@@ -206,7 +206,7 @@ plotRegion.ChIPprofile <- function(object,gts=NULL,sampleData=NULL,groupData=NUL
   }
   
   P <- ggplot(meltedProfileFrame,
-              aes_string(x="xIndex",y="Score"))+geom_path(alpha = 1,size=1.3)+xlim(0,max(axisIndex))+ylab("Score")+theme(axis.title.y=element_text(angle=0))
+              aes_string(x="xIndex",y="Score"))+geom_path(alpha = 1)+xlim(0,max(axisIndex))+ylab("Score")+theme(axis.title.y=element_text(angle=0))
   
   ## Add scales depending on style and region being plotted
   
